@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Iron Log rescue</title>
+<style>
+  :root{--ink:#15110E;--panel:#1E1815;--chalk:#EDE6DA;--mute:#A79B8C;--brass:#D3A03C;--line:#2E2621}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--ink);color:var(--chalk);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    padding:calc(24px + env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom))}
+  h1{font-size:20px;margin:0 0 4px}
+  p{color:var(--mute);font-size:14px;line-height:1.6}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-top:16px}
+  .k{color:var(--brass);font-size:12px;letter-spacing:.1em;text-transform:uppercase}
+  textarea{width:100%;min-height:220px;background:var(--ink);color:var(--chalk);border:1px solid var(--line);
+    border-radius:10px;padding:12px;font:12px/1.5 ui-monospace,Menlo,monospace;margin-top:10px}
+  button{width:100%;height:50px;border:0;border-radius:12px;background:var(--brass);color:#1A1206;
+    font-size:16px;font-weight:600;margin-top:12px}
+  button.ghost{background:transparent;color:var(--brass);border:1px solid var(--line)}
+  .stat{display:flex;justify-content:space-between;padding:6px 0;font-size:14px;border-bottom:1px solid var(--line)}
+  .stat:last-child{border:0}
+  .warn{color:var(--brass);font-size:13px}
+</style>
+</head>
+<body>
+<h1>Iron Log rescue</h1>
+<p>This page only reads what is already stored on this device. It changes nothing.
+It does not need the app to be working.</p>
+
+<div class="card" id="summary"><div class="k">What is here</div><div id="stats"></div></div>
+
+<div class="card">
+  <div class="k">Your data</div>
+  <p style="margin:8px 0 0">Tap Copy, then paste it into a message to yourself so it is somewhere safe.</p>
+  <textarea id="out" readonly></textarea>
+  <button id="copy">Copy everything</button>
+  <button class="ghost" id="dl">Download as a file</button>
+</div>
+
+<div class="card">
+  <div class="k">Important</div>
+  <p style="margin:8px 0 0">Safari and the home-screen icon keep <b>separate</b> storage. If this page looks
+  empty, open it the other way &mdash; in Safari if you tapped the icon, or from the icon if you are in
+  Safari &mdash; and check again before assuming anything is gone.</p>
+</div>
+
+<script>
+(function () {
+  const out = document.getElementById("out");
+  const stats = document.getElementById("stats");
+  const line = (k, v) => {
+    const d = document.createElement("div");
+    d.className = "stat";
+    d.innerHTML = "<span>" + k + "</span><span>" + v + "</span>";
+    stats.appendChild(d);
+  };
+
+  let raw = null;
+  try {
+    raw = localStorage.getItem("ironlog.v1");
+  } catch (e) {
+    line("Storage", "blocked by the browser");
+  }
+
+  if (!raw) {
+    line("Iron Log data", "none found here");
+    out.value = "";
+    document.querySelector(".warn") || null;
+    return;
+  }
+
+  out.value = raw;
+  line("Raw size", Math.round(raw.length / 1024) + " KB");
+
+  try {
+    const d = JSON.parse(raw);
+    const weeks = (d.log && d.log.weeks) || {};
+    const wk = Object.keys(weeks).sort();
+    let sets = 0, ex = 0;
+    wk.forEach(function (k) {
+      Object.keys(weeks[k]).forEach(function (s) {
+        ex++;
+        Object.keys(weeks[k][s]).forEach(function (i) {
+          if (/^\d+$/.test(i) && weeks[k][s][i] && weeks[k][s][i].d) sets++;
+        });
+      });
+    });
+    line("Programs", (d.programs || []).length);
+    line("Weeks logged", wk.length);
+    line("Exercise entries", ex);
+    line("Completed sets", sets);
+    if (wk.length) {
+      line("Earliest week", wk[0]);
+      line("Latest week", wk[wk.length - 1]);
+    }
+    line("Body weight entries", Object.keys((d.log && d.log.body) || {}).length);
+    line("Hand-entered bests", Object.keys((d.log && d.log.pbs) || {}).length);
+  } catch (e) {
+    line("Contents", "could not be read, but the raw text above is intact");
+  }
+
+  document.getElementById("copy").onclick = function () {
+    out.select();
+    out.setSelectionRange(0, 999999);
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) {}
+    if (!ok && navigator.clipboard) navigator.clipboard.writeText(out.value).then(function () { ok = true; });
+    this.textContent = "Copied";
+  };
+
+  document.getElementById("dl").onclick = function () {
+    try {
+      const b = new Blob([out.value], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(b);
+      a.download = "iron-log-rescue.json";
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+    } catch (e) {
+      alert("Download failed on this browser. Use Copy instead.");
+    }
+  };
+})();
+</script>
+</body>
+</html>
