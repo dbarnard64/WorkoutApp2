@@ -1,0 +1,57 @@
+name: deploy
+
+# Chunked deploy for the Iron Log single-file build.
+#
+# First run (no manifest yet): splits the committed WorkoutApp.html into
+# src/chunks/ and commits them, so no large upload is needed to bootstrap.
+# Every run after that: reassembles WorkoutApp.html from the chunks, verifies
+# the sha256 against the manifest, and only then commits the published file.
+# A mismatch fails the run and leaves the live file untouched.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Seed chunks or publish build
+        run: |
+          set -euo pipefail
+          if [ ! -f src/chunks/manifest.json ]; then
+            echo "No manifest - seeding chunks from WorkoutApp.html"
+            python3 tools/chunk.py split
+            echo "MODE=seed chunks" >> "$GITHUB_ENV"
+          else
+            python3 tools/chunk.py build
+            echo "MODE=publish build" >> "$GITHUB_ENV"
+          fi
+
+      - name: Commit result
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nothing changed - live file is already current."
+            exit 0
+          fi
+          git commit -m "chore($MODE) [skip ci]"
+          git push
+
+      - name: Summary
+        run: |
+          python3 tools/chunk.py check >> "$GITHUB_STEP_SUMMARY"
