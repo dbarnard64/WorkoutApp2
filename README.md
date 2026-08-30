@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/30462651/README.md)
 # Iron Log
 
 A single-file workout tracker. Paste a training program in as plain text and it becomes a day-by-day app with set tracking, weight logging, rest timer, history and a plate calculator.
@@ -98,4 +97,29 @@ Program length is read from any "8 weeks" in the text, or from the highest week 
 
 ## Updating the app
 
-Upload a new version of `WorkoutApp.html` over the old one in this repo and the link refreshes for everyone. Logged sets live in each phone's browser rather than in the file, so updates do not wipe your history.
+Ask Claude for the change you want and it deploys — from a phone is fine. Logged sets live in each phone's browser rather than in the file, so updates never wipe your history.
+
+**Do not upload a new `WorkoutApp.html` over the old one.** That file is now built, not edited. The source of truth is `src/chunks/`, and the next deploy would overwrite anything pasted over the top of it.
+
+### How a deploy works
+
+The app is split into ~24 KB line-aligned chunks under `src/chunks/`, with `manifest.json` recording the part count, byte length and sha256 of the finished file. A change means pushing only the chunks it touches, not the whole 200 KB.
+
+On every push to `main`, `.github/workflows/deploy.yml`:
+
+1. reassembles `WorkoutApp.html` from the chunks
+2. checks the sha256 against the manifest — did it build what was intended?
+3. boots the result in headless Chromium — does what it built actually work?
+4. only then commits the published file
+
+Step 2 catches an incomplete or corrupted chunk push. Step 3 (`tools/smoke.py`) catches a build that assembles perfectly and then white-screens: it checks the app renders, parses a program, survives a reload, and keeps `</html>` within the last 200 bytes, which is the window `sw.js` uses to decide a downloaded page arrived whole.
+
+Either check failing stops the run and leaves the live file untouched.
+
+### If a deploy goes wrong anyway
+
+The build being replaced is kept at **https://dbarnard64.github.io/WorkoutApp2/previous.html** — open that and carry on. Your logged sets are in the browser, not the file, so the old version sees all of them.
+
+### Rebuilding the chunks
+
+If the chunks ever get out of step with the published file, delete `src/chunks/manifest.json` and push. The workflow re-splits `WorkoutApp.html` into fresh chunks and commits them.
