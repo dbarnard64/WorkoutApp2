@@ -68,6 +68,11 @@ function vStyle() {
   );
 }
 
+/* the build stamp from the head of the file, so the app can say which one it is */
+function buildId() {
+  const m = document.querySelector('meta[name="build"]');
+  return (m && m.content) || "unknown";
+}
 function vSettingsPage() {
   const st = settings();
   return (
@@ -125,6 +130,8 @@ function vSettingsPage() {
 
     '<div class="mt3"><div class="eyebrow">Offline</div><div class="block mt">' +
     '<div class="row"><span class="grow" style="font-size:15px" id="offline-state">Checking&hellip;</span></div>' +
+    '<div class="row" style="margin-top:8px"><span class="grow tnum" style="color:var(--faint);font-size:12px">Build ' +
+    esc(buildId()) + "</span></div>" +
     '<p style="color:var(--faint);font-size:12px;margin:10px 0 0">Once cached, the app opens with no signal. ' +
     "New versions arrive on the launch after they are uploaded.</p>" +
     '<button class="dash" style="margin-top:12px;height:44px" data-act="refresh-app">Load newest version now</button>' +
