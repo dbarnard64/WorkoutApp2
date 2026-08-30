@@ -1,7 +1,7 @@
 {
   "target": "WorkoutApp.html",
   "parts": 9,
-  "bytes": 202633,
-  "sha256": "772d57b129e569d0fa8cd37a4568f5926ce7e5a27ccaeecddd278ccbf389c02a",
+  "bytes": 206074,
+  "sha256": "ad115d74f88884faea1e66bd90abd16dc249efbb073d25f06536b7498b32738b",
   "chunk_bytes": 24576
 }
