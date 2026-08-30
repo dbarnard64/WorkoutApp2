@@ -4,9 +4,16 @@ name: deploy
 #
 # First run (no manifest yet): splits the committed WorkoutApp.html into
 # src/chunks/ and commits them, so no large upload is needed to bootstrap.
-# Every run after that: reassembles WorkoutApp.html from the chunks, verifies
-# the sha256 against the manifest, and only then commits the published file.
-# A mismatch fails the run and leaves the live file untouched.
+#
+# Every run after that:
+#   1. reassemble WorkoutApp.html from the chunks
+#   2. verify the sha256 against the manifest  - did we build what we meant to?
+#   3. boot the result in headless Chromium    - does what we built actually work?
+#   4. only then commit the published file
+#
+# Either check failing fails the run and leaves the live file untouched, so a
+# broken build never reaches a phone. The build it replaces is kept as
+# previous.html for rollback without git.
 
 on:
   push:
@@ -27,17 +34,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Seed chunks or publish build
+      - name: Seed chunks or assemble build
         run: |
           set -euo pipefail
           if [ ! -f src/chunks/manifest.json ]; then
             echo "No manifest - seeding chunks from WorkoutApp.html"
             python3 tools/chunk.py split
-            echo "MODE=seed chunks" >> "$GITHUB_ENV"
+            echo "MODE=seed" >> "$GITHUB_ENV"
           else
             python3 tools/chunk.py build
-            echo "MODE=publish build" >> "$GITHUB_ENV"
+            echo "MODE=publish" >> "$GITHUB_ENV"
           fi
+
+      - name: Install browser for the smoke test
+        if: env.MODE == 'publish'
+        run: |
+          set -euo pipefail
+          pip install --quiet playwright
+          playwright install --with-deps chromium
+
+      - name: Smoke test the assembled build
+        if: env.MODE == 'publish'
+        run: python3 tools/smoke.py WorkoutApp.html
 
       - name: Commit result
         run: |

@@ -23,6 +23,7 @@ import sys
 TARGET = "WorkoutApp.html"
 CHUNK_DIR = os.path.join("src", "chunks")
 MANIFEST = os.path.join(CHUNK_DIR, "manifest.json")
+PREVIOUS = "previous.html"  # last published build, kept for one-tap rollback
 CHUNK_BYTES = 24576  # ~24 KB, split only on line boundaries
 
 
@@ -109,6 +110,12 @@ def build() -> int:
     if existing == data:
         print("%s already matches the chunks - nothing to publish" % TARGET)
         return 0
+    if existing is not None:
+        # Keep the outgoing build reachable at a stable URL. Recovering from a bad
+        # deploy on a phone means opening previous.html, not running git.
+        with open(PREVIOUS, "wb") as fh:
+            fh.write(existing)
+        print("kept the outgoing build as %s" % PREVIOUS)
     with open(TARGET, "wb") as fh:
         fh.write(data)
     print("published %s from %d chunks (%d bytes, sha256 %s)"
