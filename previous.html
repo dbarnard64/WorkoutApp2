@@ -946,7 +946,45 @@ function beep() {
 /* weights typed with a comma decimal separator must still be numbers */
 const numOf = (v) => parseFloat(String(v == null ? "" : v).replace(",", "."));
 
-const nn = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+/* The key an exercise is filed under, for history, bests and slot repair.
+   The same lift gets written a dozen ways, so word order and punctuation are
+   ignored: "High-to-Low Cable Fly" and "Cable Fly (High to Low)" are one
+   exercise. Direction words keep their order, so high-to-low and low-to-high
+   stay apart. */
+const NN_SYN = {
+  db: "dumbbell", dbs: "dumbbell", dumbell: "dumbbell", dumbells: "dumbbell",
+  bb: "barbell", kb: "kettlebell", kbs: "kettlebell", ez: "ezbar",
+  bw: "bodyweight", ohp: "overheadpress", rdl: "romaniandeadlift",
+  sldl: "stifflegdeadlift", ohe: "overheadextension",
+  flye: "fly", flyes: "fly", flies: "fly", flys: "fly",
+  ext: "extension", exts: "extension", calves: "calf", lats: "lat",
+  biceps: "bicep", triceps: "tricep"
+};
+const NN_DROP = { the: 1, a: 1, an: 1, and: 1, to: 1, of: 1, with: 1, on: 1,
+  for: 1, or: 1, from: 1, into: 1 };
+/* order carries meaning only for these; incline, rear, wide and the rest are
+   adjectives whose position in the name says nothing */
+const NN_DIR = { high: 1, low: 1, up: 1, down: 1, top: 1, bottom: 1 };
+function nnStem(t) {
+  if (NN_SYN[t]) t = NN_SYN[t];
+  if (t.length > 3 && t.charAt(t.length - 1) === "s" && t.slice(-2) !== "ss")
+    t = t.slice(0, -1);
+  if (t.length > 3 && t.charAt(t.length - 1) === "e") t = t.slice(0, -1);
+  return t;
+}
+const nnFlat = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+const nn = (name) => {
+  const toks = [];
+  const dir = [];
+  String(name == null ? "" : name).toLowerCase().split(/[^a-z0-9]+/).forEach(function (t) {
+    if (!t || NN_DROP[t]) return;
+    if (NN_DIR[t]) dir.push(t);
+    toks.push(nnStem(t));
+  });
+  if (!toks.length) return nnFlat(name);
+  toks.sort();
+  return toks.join("-") + (dir.length > 1 ? "~" + dir.join("") : "");
+};
 const setIdx = (e) => Object.keys(e || {}).filter((k) => /^\d+$/.test(k));
 
 /* ------------------------------------------------------------------ */
@@ -5071,6 +5109,56 @@ function defaultStart() {
 function mondayISO() {
   return ymd(mondayOf(0));
 }
+/* Manual bests, category overrides and parse fixes were filed under the old
+   flat name key. Rebuild them under the canonical one, by name, so nothing
+   has to be re-entered. */
+function migrateNameKeys() {
+  if (settings().nameKeys === 2) return 0;
+  const names = {};
+  const learn = function (nm) { if (nm) names[nnFlat(nm)] = nm; };
+  S.programs.forEach(function (p) {
+    let dp = null;
+    try { dp = parseProgram(p.raw); } catch (e) { return; }
+    dp.days.forEach(function (d) {
+      d.items.forEach(function (it) { if (it.kind === "ex") learn(it.name); });
+    });
+  });
+  Object.keys(S.log.weeks || {}).forEach(function (wk) {
+    const w = S.log.weeks[wk];
+    Object.keys(w).forEach(function (k) { learn(logName(w[k])); });
+  });
+  Object.keys(S.log.pbs || {}).forEach(function (k) {
+    if (S.log.pbs[k]) learn(S.log.pbs[k].name);
+  });
+
+  const man = S.log.pbs || {};
+  const pout = {};
+  Object.keys(man).forEach(function (k) {
+    const m = man[k];
+    if (!m) return;
+    const nk = m.name ? nn(m.name) : names[k] ? nn(names[k]) : k;
+    const cur = pout[nk];
+    /* two spellings collapsing onto one row: the heavier lift wins */
+    if (!cur || cur.hidden || (!m.hidden && numOf(m.w) > numOf(cur.w))) pout[nk] = m;
+  });
+  S.log.pbs = pout;
+
+  const rekey = function (obj) {
+    const out = {};
+    Object.keys(obj || {}).forEach(function (k) {
+      out[names[k] ? nn(names[k]) : k] = obj[k];
+    });
+    return out;
+  };
+  S.log.cats = rekey(S.log.cats);
+  S.programs.forEach(function (p) { if (p.fixes) p.fixes = rekey(p.fixes); });
+
+  setSetting({ nameKeys: 2 });
+  cacheRaw = null;
+  persist();
+  return 1;
+}
+
 function seedToday() {
   const dp = parsedProgram();
   if (!dp) return;
@@ -5122,6 +5210,11 @@ try {
   migrateAnchor();
 } catch (e) {
   bootTrouble += "slot migration failed. ";
+}
+try {
+  migrateNameKeys();
+} catch (e) {
+  bootTrouble += "name migration failed. ";
 }
 try {
   migrateWeekKeys();
