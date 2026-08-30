@@ -1,0 +1,207 @@
+  if (k === "paste-text") {
+    S.draft.text = el.value;
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => {
+      const pv = document.getElementById("preview");
+      if (pv) pv.innerHTML = vPastePreview();
+      const btn = document.querySelector('[data-act="paste-save"]');
+      if (btn) {
+        const dp = S.draft.text.trim() ? parseProgram(S.draft.text) : null;
+        btn.disabled = !(dp && dp.days.length && dp.days.reduce((a, d) => a + d.count, 0));
+      }
+    }, 350);
+  }
+});
+
+document.addEventListener("change", (ev) => {
+  const el = ev.target;
+  if (el.dataset.in === "start") {
+    setStart(el.dataset.id, el.value);
+    render();
+  }
+  if (el.dataset.in === "paste-start") {
+    S.draft.start = el.value;
+    if (S.sheet && S.sheet.type === "startask") render();
+  }
+  if (el.dataset.in === "b-dayname") {
+    S.build.days[+el.dataset.i].name = el.value;
+    render();
+  }
+  if (el.dataset.in === "b-start") S.build.start = el.value;
+  if (el.dataset.in === "bodyw") render();
+  if (el.dataset.in === "accent") applyAccent(el.value);
+});
+
+/* iOS fires change repeatedly while the colour picker is dragged, and re-rendering
+   would replace the input the picker is anchored to, closing it. So apply the colour
+   through CSS variables and touch up the two bits of text in place. */
+function applyAccent(v) {
+  setSetting({ accent: v });
+  applyTheme();
+  const lab = document.getElementById("accent-label");
+  if (lab) lab.textContent = v;
+  const rst = document.getElementById("accent-reset");
+  if (rst) rst.style.visibility = "visible";
+}
+
+/* ===== init ===== */
+function saveFixes() {
+  const p = activeProgram();
+  if (!p || !S.pendingFix) return;
+  p.fixes = Object.assign({}, p.fixes || {});
+  Object.keys(S.pendingFix).forEach((k) => {
+    const f = S.pendingFix[k];
+    if (f.skip) p.fixes[k] = { skip: true };
+    else if (f.sets || f.reps) p.fixes[k] = { sets: f.sets || null, reps: f.reps || null };
+  });
+  S.pendingFix = {};
+  cacheRaw = null;
+  persist();
+}
+
+/* A program pasted on the weekend is for the week about to start, not the
+   one that is ending. */
+function humanStart(iso, anchored) {
+  if (!iso) return "No date set";
+  if (!anchored) return humanMonday(iso);
+  const d = new Date(iso + "T00:00:00");
+  return "Day 1 = " + d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+}
+function humanMonday(iso) {
+  if (!iso) return "No date set";
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); /* floor to that week's Monday */
+  return "Week 1 = w/c Mon " + d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
+function defaultStart() {
+  const d = new Date();
+  const day = d.getDay(); /* 0 Sun, 6 Sat */
+  if (day === 0 || day === 6) {
+    d.setDate(d.getDate() + ((8 - day) % 7));
+    return ymd(d);
+  }
+  return mondayISO();
+}
+
+function mondayISO() {
+  return ymd(mondayOf(0));
+}
+function seedToday() {
+  const dp = parsedProgram();
+  if (!dp) return;
+  const ti = todayAnchorIdx();
+  if (ti >= 0) {
+    S.dayIdx = ti < dp.days.length + restSlotCount(dp) ? ti : 0;
+    return;
+  }
+  const i = dp.days.findIndex((d) => d.name.toLowerCase() === todayName());
+  S.dayIdx = i >= 0 ? i : 0;
+}
+S.draft = { text: "", start: mondayISO() };
+S.pendingFix = {};
+/* Migrations touch stored data, so a fault in one must not take the app down with it.
+   If any step throws, carry on and render what we have rather than showing a dead screen. */
+function migrateAnchor() {
+  (S.programs || []).forEach(function (pr) {
+    if (!pr.start || !pr.raw) return;
+    let dp;
+    try {
+      dp = parseProgram(pr.raw);
+    } catch (e) {
+      return;
+    }
+    if (!isNumberedDp(dp)) return;
+    const a = new Date(pr.start + "T00:00:00");
+    if (isNaN(a.getTime()) || (a.getDay() + 6) % 7 === 0) return; /* Monday anchor: buckets already agree */
+    Object.keys(S.log.weeks || {}).forEach(function (bk) {
+      const bd = new Date(bk + "T00:00:00");
+      const t = Math.max(0, Math.floor((bd - a) / 604800000));
+      const tgt = new Date(a);
+      tgt.setDate(tgt.getDate() + t * 7);
+      const tk = ymd(tgt);
+      if (tk === bk) return;
+      const src = S.log.weeks[bk];
+      Object.keys(src).forEach(function (k) {
+        if (k.indexOf(pr.id + ":") !== 0) return;
+        S.log.weeks[tk] = S.log.weeks[tk] || {};
+        if (!(k in S.log.weeks[tk])) S.log.weeks[tk][k] = src[k];
+        delete src[k];
+      });
+      if (!Object.keys(src).length) delete S.log.weeks[bk];
+    });
+  });
+}
+let bootTrouble = "";
+try {
+  migrateKeys();
+  migrateAnchor();
+} catch (e) {
+  bootTrouble += "slot migration failed. ";
+}
+try {
+  migrateWeekKeys();
+} catch (e) {
+  bootTrouble += "week migration failed. ";
+}
+try {
+  seedToday();
+} catch (e) {
+  bootTrouble += "day selection failed. ";
+}
+try {
+  applyTheme();
+} catch (e) {}
+try {
+  dockInit();
+  render();
+  appAlive = true;
+} catch (e) {
+  /* last resort: drop the custom theme and any half-applied view state, then try once more */
+  try {
+    S.sheet = null;
+    S.editing = null;
+    S.tab = "train";
+    dockInit();
+    render();
+    appAlive = true;
+  } catch (e2) {
+    ironFail("render", e2 && e2.message, 0, 0, e2 && e2.stack);
+  }
+}
+if (bootTrouble) {
+  try {
+    const bar = document.createElement("div");
+    bar.className = "nag";
+    bar.textContent = bootTrouble + "Your data is intact — take a backup and tell Claude.";
+    const app = document.getElementById("app");
+    if (app && app.firstChild) app.insertBefore(bar, app.firstChild.nextSibling);
+  } catch (e) {}
+}
+
+/* ===== offline ===== */
+function setOffline(txt) {
+  offlineState = txt;
+  const el = document.getElementById("offline-state");
+  if (el) el.textContent = txt;
+}
+if (!("serviceWorker" in navigator)) {
+  setOffline("Not supported by this browser");
+} else if (location.protocol === "https:") {
+  navigator.serviceWorker
+    .register("sw.js")
+    .then(function () {
+      setOffline("Ready \u2014 opens with no signal");
+    })
+    .catch(function () {
+      setOffline("Could not cache (sw.js missing?)");
+    });
+} else if (location.protocol === "file:") {
+  setOffline("Already local \u2014 no caching needed");
+} else {
+  setOffline("Needs an https address");
+}
+
+</script>
+</body>
+</html>

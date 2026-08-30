@@ -1,0 +1,842 @@
+    o.stop(ctx.currentTime + 0.75);
+  } catch (e) {
+    /* silent */
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Plate maths                                                       */
+/* ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------ */
+/*  Session maths                                                     */
+/* ------------------------------------------------------------------ */
+
+/* weights typed with a comma decimal separator must still be numbers */
+const numOf = (v) => parseFloat(String(v == null ? "" : v).replace(",", "."));
+
+const nn = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+const setIdx = (e) => Object.keys(e || {}).filter((k) => /^\d+$/.test(k));
+
+/* ------------------------------------------------------------------ */
+/*  Program weeks                                                     */
+/* ------------------------------------------------------------------ */
+
+function mondayOfISO(iso) {
+  const d = new Date(iso + "T00:00:00");
+  if (isNaN(d.getTime())) return null;
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function programWeek(startISO, weekOff, length, anchored) {
+  if (!startISO) return null;
+  const s = anchored ? new Date(startISO + "T00:00:00") : mondayOfISO(startISO);
+  if (!s || isNaN(s.getTime())) return null;
+  let cur;
+  if (anchored) {
+    const t = new Date();
+    t.setHours(0, 0, 0, 0);
+    cur = new Date(s);
+    cur.setDate(cur.getDate() + (Math.floor((t - s) / 604800000) + weekOff) * 7);
+  } else {
+    cur = mondayOf(weekOff);
+  }
+  const n = Math.round((cur - s) / 604800000) + 1;
+  const cycling = length > 0 && n > length;
+  return {
+    n,
+    eff: cycling ? ((n - 1) % length) + 1 : n,
+    round: cycling ? Math.floor((n - 1) / length) + 1 : 1,
+    length,
+    before: n < 1,
+    startMonday: s,
+  };
+}
+
+function itemActive(it, eff) {
+  if (eff == null) return true;
+  if (it.parity) return it.parity === "odd" ? eff % 2 === 1 : eff % 2 === 0;
+  if (it.weeks) return it.weeks.indexOf(eff) >= 0;
+  return true;
+}
+
+function weekRuleLabel(it) {
+  if (it.parity) return it.parity === "odd" ? "Odd weeks" : "Even weeks";
+  if (it.weeks) return "Weeks " + it.weeks.join(", ");
+  return null;
+}
+
+/* Per-day adjustments live on that week's log entry, so they never touch the
+   program or any other week. "n" stays the program's exercise name so slots keep
+   realigning, while "alt" is what you actually did. */
+function entryField(key, f) {
+  const e = entriesFor(key);
+  return e && e[f] != null ? e[f] : null;
+}
+function writeEntry(key, f, v, progName) {
+  const wk = wkNow();
+  if (!S.log.weeks[wk]) S.log.weeks[wk] = {};
+  const ex = (S.log.weeks[wk][key] = S.log.weeks[wk][key] || {});
+  if (progName) ex.n = progName;
+  if (v == null) delete ex[f];
+  else ex[f] = v;
+  persist();
+}
+function weekSets(key) {
+  const v = entryField(key, "sets");
+  const n = parseInt(v, 10);
+  return v != null && !isNaN(n) && n > 0 ? n : null;
+}
+function shownName(it) {
+  const a = entryField(it.key, "alt");
+  return a && String(a).trim() ? String(a).trim() : it.name;
+}
+/* what history and bests should file this entry under */
+function logName(e) {
+  return e && e.alt && String(e.alt).trim() ? String(e.alt).trim() : e && e.n ? e.n : null;
+}
+
+/* Extra exercises added on the day live only in that week's log, keyed
+   {pid}:d{n}a{n}. They become pseudo-items so every consumer treats them
+   like the rest of the day. */
+function dayExtras(di) {
+  const w = S.log.weeks[wkNow()] || {};
+  const pid = activeProgram() ? activeProgram().id : "";
+  const re = new RegExp("^" + pid.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ":d" + di + "a(\\d+)$");
+  return Object.keys(w)
+    .map(function (k) {
+      const m = k.match(re);
+      if (!m || !w[k] || !w[k].n) return null;
+      return {
+        kind: "ex", extra: true, key: k, ord: +m[1],
+        name: w[k].n, sets: w[k].sets || 1, reps: w[k].reps || "",
+        confirmed: true, /* typed by hand; never route it to the confirm flow */
+      };
+    })
+    .filter(Boolean)
+    .sort(function (a, b) { return a.ord - b.ord; });
+}
+
+function currentDayIndex() {
+  const dp = parsedProgram();
+  const day = dp.days[S.dayIdx] || dp.days[0];
+  return day ? dayIndexOf(day) : 0;
+}
+
+/* Anchored programs shorter than seven days fill the gap with rest slots:
+   real days in the UI, empty of prescribed work, but fully trackable through
+   the extras system so training on a rest day still counts. */
+function restSlotCount(dp) {
+  return progAnchorISO() && dp.days.length < 7 ? 7 - dp.days.length : 0;
+}
+function restDayObj(idx) {
+  return { id: "d" + idx, name: "Day " + (idx + 1), title: "Rest day", items: [], rest: true };
+}
+function dayAt(dp, idx) {
+  if (idx < dp.days.length) return dp.days[idx];
+  if (idx < dp.days.length + restSlotCount(dp)) return restDayObj(idx);
+  return dp.days[Math.min(idx, dp.days.length - 1)] || dp.days[0];
+}
+function dayIndexOf(day) {
+  if (day.rest) return +String(day.id || "d0").slice(1);
+  for (let i = 0; i < day.items.length; i++) {
+    const m = String(day.items[i].key || "").match(/^d(\d+)e/);
+    if (m) return +m[1];
+  }
+  const dp = cacheParsed;
+  return dp ? dp.days.indexOf(day) : -1;
+}
+
+/* out of this week's plan, but if you ticked it you did it, so count it */
+function anyTicked(e) {
+  const ks = setIdx(e);
+  for (let i = 0; i < ks.length; i++) if (e[ks[i]] && e[ks[i]].d) return true;
+  return false;
+}
+
+function summarize(day, entriesFor, eff) {
+  let setsDone = 0;
+  let volume = 0;
+  let exDone = 0;
+  let exTotal = 0;
+  let unweighted = 0;
+  const lines = [];
+  day.items.concat(dayExtras(dayIndexOf(day))).forEach((it) => {
+    if (it.kind !== "ex") return;
+    if (!itemActive(it, eff) && !anyTicked(entriesFor(it.key))) return;
+    exTotal++;
+    const n = setsFor(it);
+    const e = entriesFor(it.key);
+    let done = 0;
+    let best = null;
+    let vol = 0;
+    for (let i = 0; i < n; i++) {
+      const s = e[i];
+      if (!s || !s.d) continue;
+      done++;
+      setsDone++;
+      const w = numOf(s.w);
+      const rp = numOf(s.r);
+      if (!isNaN(w) && !isNaN(rp) && dropsComplete(s)) {
+        vol += w * rp;
+        (s.dr || []).forEach(function (d2) {
+          vol += numOf(d2.w) * numOf(d2.r);
+        });
+        if (!best || w > best.w) best = { w, r: rp };
+      } else if (!isTimed(it)) {
+        unweighted++;
+      }
+    }
+    if (done === n) exDone++;
+    if (done > 0)
+      lines.push({ name: shownName(it), done: done, total: n, best, vol });
+    volume += vol;
+  });
+  return { setsDone, volume: Math.round(volume), exDone, exTotal, lines, unweighted };
+}
+
+const fmtSet = (s) => {
+  const w = s.w ? s.w + U() : "";
+  const r = s.r ? s.r : "";
+  if (w && r) return w + " × " + r;
+  return w || (r ? r + " reps" : "done");
+};
+
+const SEED = `Elite 7-Day Mass Building Program (8 Weeks)
+Program Principles
+Duration: 90 minutes per session
+Warm-up: 10 minutes plus ramp-up sets
+Working sets taken to 0–1 RIR (reps in reserve)
+Last set of isolation exercises: failure plus dropset or rest-pause
+Rest: heavy compounds 2–3 minutes, isolation 60–90 seconds
+Tempo: 3 second lowering phase, explosive concentric, squeeze contractions
+
+Monday – Upper Power (Chest Focus)
+Exercise
+Sets
+Reps
+Incline Barbell Press
+5
+5–8
+Flat Dumbbell Press
+4
+8–10
+Weighted Dips
+3
+8–12
+Incline Machine Press
+3
+10–12
+Cable Fly (High to Low)
+3
+15
+Machine Lateral Raises
+5
+15–20
+Rope Pushdowns
+4
+12–15
+Hanging Leg Raises
+4
+15
+
+Tuesday – Back Thickness & Width
+Exercise
+Sets
+Reps
+Deadlift (Weeks 1,3,5,7)
+4
+5
+Rack Pull (Weeks 2,4,6,8)
+4
+6
+Weighted Pull-ups
+4
+8
+Chest Supported Row
+4
+10
+T-Bar Row
+3
+10
+Wide Grip Pulldown
+3
+12
+Straight Arm Pulldown
+3
+15
+Rear Delt Fly
+4
+20
+
+Wednesday – Tom Platz Leg Day
+Exercise
+Sets
+Reps
+Back Squat
+6
+6–10
+Front Squat
+4
+10
+Leg Press
+4
+15
+Bulgarian Split Squat
+3
+12
+Walking Lunges
+2
+20 steps
+Leg Extensions
+3
+20
+Standing Calf Raises
+6
+15–20
+Seated Calves
+4
+20
+Finish with:
+Sled Push × 6 rounds
+
+Thursday – Shoulder Domination
+Exercise
+Sets
+Reps
+Seated Dumbbell Press
+5
+8
+Smith Machine Press
+3
+10
+Cable Lateral Raise
+6
+15
+Dumbbell Lateral Raise
+4
+15
+Rear Pec Deck
+5
+20
+Upright Cable Row
+3
+12
+Heavy Shrugs
+5
+12
+
+Friday – Arm Annihilation
+Triceps
+Close Grip Bench Press – 4×8
+Skull Crushers – 4×10
+Rope Pushdowns – 4×15
+Overhead Rope Extensions – 3×15
+Biceps
+EZ Bar Curl – 4×8
+Incline Dumbbell Curl – 4×10
+Hammer Curl – 3×12
+Bayesian Cable Curl – 3×15
+Finish
+Forearm circuit × 3 rounds
+Wrist curls
+Reverse curls
+Farmer carries
+
+Saturday – Posterior Chain
+Exercise
+Sets
+Reps
+Romanian Deadlift
+5
+8
+Seated Leg Curl
+4
+12
+Lying Leg Curl
+4
+15
+Hip Thrust
+4
+10
+Hyperextensions
+3
+15
+Seated Calves
+5
+20
+Cable Crunch
+5
+20
+
+Sunday – Aesthetic Pump Day
+Keep rest periods to 45–60 seconds.
+Giant Set 1 (4 rounds)
+Incline Smith Press ×12
+Neutral Grip Pulldown ×12
+Machine Chest Press ×15
+Giant Set 2 (4 rounds)
+Cable Lateral Raise ×20
+Rear Delt Fly ×20
+Face Pull ×20
+Giant Set 3 (3 rounds)
+Cable Curl ×15
+Rope Pushdown ×15
+Incline Curl ×12
+Overhead Extension ×12
+Finish with:
+20–30 minutes incline treadmill walking
+
+Weekly Progression
+Weeks 1–2: Learn technique and establish baseline weights.
+Weeks 3–4: Increase weight by 2.5–5% while staying within the target rep ranges.
+Week 5: Add one extra working set to the first two exercises of each workout.
+Weeks 6–7: Continue increasing load where possible. On the last set of isolation exercises, use a dropset or rest-pause technique.
+Week 8: Deload by reducing all working sets by about 40–50%, while maintaining good form and moderate intensity.
+
+Nutrition Around Training
+Pre-workout, 60–90 minutes before: oats, banana, peanut butter, optional whey protein.
+Post-workout, within 1 hour: chicken or lean mince, basmati rice, vegetables.
+Evening meal: lean mince or steak, potatoes or rice, vegetables.
+Before bed: Greek yogurt, almonds.`;
+
+
+/* ===== storage: localStorage, with an in-memory fallback ===== */
+const KEY = "ironlog.v1";
+let mem = null;
+function loadState() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return mem;
+}
+let saveTimer = null;
+function persist() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    const data = { programs: S.programs, activeId: S.activeId, log: S.log };
+    mem = data;
+    try {
+      localStorage.setItem(KEY, JSON.stringify(data));
+    } catch (e) {}
+  }, 300);
+}
+
+/* ===== state ===== */
+const S = {
+  programs: [],
+  activeId: null,
+  log: { weeks: {}, settings: {}, sessions: {}, body: {}, pbs: {}, cats: {} },
+  tab: "train",
+  dayIdx: 0,
+  weekOff: 0,
+  openEx: null,
+  editing: null,
+  sheet: null,
+  rest: null,
+};
+
+const boot = loadState();
+if (boot && boot.programs && boot.programs.length) {
+  S.programs = boot.programs;
+  S.activeId = boot.activeId || boot.programs[0].id;
+  S.log = {
+    weeks: (boot.log && boot.log.weeks) || {},
+    settings: (boot.log && boot.log.settings) || {},
+    sessions: (boot.log && boot.log.sessions) || {},
+    body: (boot.log && boot.log.body) || {},
+    pbs: (boot.log && boot.log.pbs) || {},
+    cats: (boot.log && boot.log.cats) || {},
+  };
+} else {
+  S.programs = [
+    { id: "p" + Date.now(), raw: SEED, title: parseProgram(SEED).title, start: "2026-07-06" },
+  ];
+  S.activeId = S.programs[0].id;
+}
+
+/* week keys written before the timezone fix landed on Sunday east of UTC */
+/* Two weeks can collide when a device has written both an old Sunday-dated key and
+   its Monday equivalent. Overwriting one with the other destroys logged sets, so
+   merge set by set and never replace something already recorded. */
+function mergeInto(target, incoming, bucket) {
+  Object.keys(incoming).forEach(function (k) {
+    const b = incoming[k];
+    const a = target[k];
+    if (!a) {
+      target[k] = b;
+      return;
+    }
+    if (bucket === "sessions") {
+      /* keep whichever session recorded more work */
+      if ((b.sets || 0) > (a.sets || 0)) target[k] = b;
+      return;
+    }
+    setIdx(b).forEach(function (i) {
+      const bs = b[i];
+      if (!bs) return;
+      const as = a[i];
+      const bHas = bs.d || bs.w || bs.r;
+      const aHas = as && (as.d || as.w || as.r);
+      if (bHas && (!aHas || (!as.d && bs.d))) a[i] = bs;
+    });
+    if (!a.n && b.n) a.n = b.n;
+    if (!a.alt && b.alt) a.alt = b.alt;
+    if (a.sets == null && b.sets != null) a.sets = b.sets;
+  });
+}
+
+function migrateWeekKeys() {
+  let moved = 0;
+  /* anchored numbered-day programs keep buckets on their own weekday, not
+     Mondays: any key that is a whole number of weeks from an anchor is legal */
+  const anchors = [];
+  (S.programs || []).forEach(function (pr) {
+    if (!pr.start || !pr.raw) return;
+    try {
+      if (isNumberedDp(parseProgram(pr.raw))) {
+        const a = new Date(pr.start + "T00:00:00");
+        if (!isNaN(a.getTime())) anchors.push(a.getTime());
+      }
+    } catch (e) {}
+  });
+  const onAnchor = function (d) {
+    return anchors.some(function (a) {
+      return Math.round((d.getTime() - a) / 86400000) % 7 === 0;
+    });
+  };
+  ["weeks", "sessions"].forEach(function (bucket) {
+    const src = S.log[bucket] || {};
+    Object.keys(src).forEach(function (k) {
+      const d = new Date(k + "T00:00:00");
+      if (isNaN(d.getTime()) || d.getDay() === 1 || onAnchor(d)) return;
+      d.setDate(d.getDate() + ((8 - d.getDay()) % 7));
+      const nk = ymd(d);
+      if (src[nk]) mergeInto(src[nk], src[k], bucket);
+      else src[nk] = src[k];
+      delete src[k];
+      moved++;
+    });
+  });
+  if (moved) persist();
+}
+
+/* legacy logs were saved without a program prefix; hand them to the first program */
+function migrateKeys() {
+  if (!S.programs.length) return;
+  const owner = S.programs[0].id;
+  let moved = 0;
+  Object.keys(S.log.weeks || {}).forEach((wk) => {
+    const w = S.log.weeks[wk];
+    Object.keys(w).forEach((k) => {
+      if (k.indexOf(":") >= 0) return;
+      w[owner + ":" + k] = w[k];
+      delete w[k];
+      moved++;
+    });
+  });
+  Object.keys(S.log.sessions || {}).forEach((wk) => {
+    const w = S.log.sessions[wk];
+    Object.keys(w).forEach((k) => {
+      if (k.indexOf(":") >= 0) return;
+      w[owner + ":" + k] = w[k];
+      delete w[k];
+    });
+  });
+  if (moved) persist();
+}
+
+const settings = () =>
+  Object.assign({ restSec: 90, autoRest: true, autoTick: true }, S.log.settings || {});
+
+/* ===== derived ===== */
+const activeProgram = () =>
+  S.programs.find((p) => p.id === S.activeId) || S.programs[0];
+
+let cacheRaw = null;
+let cacheParsed = null;
+function parsedProgram() {
+  const p = activeProgram();
+  if (!p) return null;
+  const stamp = p.id + "|" + p.raw + "|" + JSON.stringify(p.fixes || {});
+  if (stamp !== cacheRaw) {
+    cacheRaw = stamp;
+    const dp = applyFixes(parseProgram(p.raw), p.fixes);
+    /* scope slots to this program so two programs cannot share logged sets */
+    dp.days.forEach((d) =>
+      d.items.forEach((it) => {
+        if (it.kind === "ex" && it.key.indexOf(":") < 0) it.key = p.id + ":" + it.key;
+      })
+    );
+    cacheParsed = dp;
+    try {
+      repairKeys(dp, p.id);
+    } catch (e) {}
+  }
+  return cacheParsed;
+}
+
+const wkNow = () => wkKey(S.weekOff);
+const entriesFor = (k) => (S.log.weeks[wkNow()] && S.log.weeks[wkNow()][k]) || {};
+const effWeek = () => {
+  const p = activeProgram();
+  const dp = parsedProgram();
+  if (!p || !dp) return null;
+  const pw = programWeek(p.start, S.weekOff, dp.length, isNumberedDp(dp));
+  return pw && !pw.before ? pw.eff : null;
+};
+
+function dayProgress(day) {
+  const eff = effWeek();
+  let total = 0,
+    done = 0;
+  day.items.concat(dayExtras(dayIndexOf(day))).forEach((it) => {
+    if (it.kind !== "ex") return;
+    const e = entriesFor(it.key);
+    if (!itemActive(it, eff) && !anyTicked(e)) return;
+    const n = setsFor(it);
+    total += n;
+    for (let i = 0; i < n; i++) if (e[i] && e[i].d) done++;
+  });
+  return { total, done, pct: total ? done / total : 0 };
+}
+
+function historyIndex() {
+  const map = {};
+  const cur = wkNow();
+  Object.keys(S.log.weeks || {}).forEach((week) => {
+    if (week >= cur) return;
+    const w = S.log.weeks[week];
+    Object.keys(w).forEach((k) => {
+      const e = w[k];
+      if (!e || !logName(e)) return;
+      const sets = setIdx(e)
+        .map((x) => e[x])
+        .filter((s) => s && s.d && (s.w || s.r));
+      if (!sets.length) return;
+      const key = nn(logName(e));
+      (map[key] = map[key] || []).push({ week, sets });
+    });
+  });
+  Object.keys(map).forEach((k) => map[k].sort((a, b) => (a.week < b.week ? 1 : -1)));
+  return map;
+}
+
+/* Slots are named by position, so editing a program's text can shift them and
+   attach logged sets to the wrong exercise. Every entry stores its exercise name,
+   so realign them whenever the program is (re)parsed. Anything whose exercise no
+   longer exists is parked under a key that cannot collide, keeping it available to
+   history and personal bests without polluting a live slot. */
+function repairKeys(dp, pid) {
+  const byDay = {};
+  const nameOfKey = {};
+  const dupe = {};
+  dp.days.forEach(function (d, di) {
+    byDay[di] = {};
+    const seen = {};
+    d.items.forEach(function (it) {
+      if (it.kind !== "ex") return;
+      const k = nn(it.name);
+      /* two exercises with the same name in one day cannot be told apart by name,
+         so leave their slots alone rather than shuffling logs between them */
+      if (seen[k]) dupe[k] = true;
+      seen[k] = true;
+      byDay[di][k] = it.key;
+      nameOfKey[it.key] = k;
+    });
+  });
+
+  const wanted = function (k, name) {
+    const m = k.match(/:d(\d+)e/);
+    const di = m ? +m[1] : -1;
+    if (byDay[di] && byDay[di][name]) return byDay[di][name];
+    const days = Object.keys(byDay);
+    for (let j = 0; j < days.length; j++) {
+      if (byDay[days[j]][name]) return byDay[days[j]][name];
+    }
+    return null;
+  };
+
+  let moved = 0;
+  Object.keys(S.log.weeks || {}).forEach(function (wk) {
+    const w = S.log.weeks[wk];
+    const mine = [];
+    const out = {};
+    /* everything not ours, and anything already parked, passes straight through */
+    Object.keys(w).forEach(function (k) {
+      if (k.indexOf(pid + ":") !== 0 || k.indexOf(":x:") >= 0) out[k] = w[k];
+      else mine.push(k);
+    });
+    if (!mine.length) return;
+
+    /* two passes, so a pair of entries swapping places cannot block each other */
+    const claims = [];
+    mine.forEach(function (k) {
+      if (/:d\d+a\d+$/.test(k)) {
+        out[k] = w[k]; /* added on the day; not the program's to reshuffle */
+        return;
+      }
+      const e = w[k];
+      const name = e && e.n ? nn(e.n) : null;
+      claims.push({ k: k, e: e, name: name, to: name ? wanted(k, name) : k });
+    });
+    claims.forEach(function (c) {
+      if (c.name && dupe[c.name]) {
+        out[c.k] = c.e; /* ambiguous name, keep its position */
+        return;
+      }
+      if (!c.name) {
+        out[c.k] = c.e; /* no name recorded, leave it where it is */
+        return;
+      }
+      const to = c.to;
+      if (to && !out[to]) {
+        out[to] = c.e;
+        if (to !== c.k) moved++;
+      } else {
+        out[pid + ":x:" + c.name] = c.e; /* gone, or a duplicate claim */
+        moved++;
+      }
+    });
+    S.log.weeks[wk] = out;
+  });
+  if (moved) persist();
+  return moved;
+}
+
+const scopedDay = (dayId) => {
+  const p = activeProgram();
+  return (p ? p.id + ":" : "") + dayId;
+};
+const sessionFor = (dayId) => {
+  const wk = wkNow();
+  if (!S.log.sessions || !S.log.sessions[wk]) return null;
+  return S.log.sessions[wk][scopedDay(dayId)] || null;
+};
+
+/* ===== mutations ===== */
+/* A deload halves sets only while the toggle is on. Marking the day as done
+   is the declaration of what the session was, so at that moment the halved
+   counts are written onto every exercise you touched, as per-day overrides.
+   Turning the toggle off later cannot then reinterpret a finished session
+   as half done. */
+function stampDeloadDay(day) {
+  if (!deloadActive()) return;
+  const wk = wkNow();
+  const w = S.log.weeks[wk] || {};
+  day.items.concat(dayExtras(dayIndexOf(day))).forEach(function (it) {
+    if (it.kind !== "ex" || it.extra) return;
+    const ex = w[it.key];
+    if (!ex || ex.sets != null) return;
+    if (!anyTicked(ex)) return;
+    ex.sets = setsFor(it);
+  });
+}
+
+function patch(key, i, p, name) {
+  const wk = wkNow();
+  const weeks = S.log.weeks;
+  weeks[wk] = weeks[wk] || {};
+  weeks[wk][key] = weeks[wk][key] || {};
+  weeks[wk][key].n = name;
+  weeks[wk][key][i] = Object.assign({}, weeks[wk][key][i], p);
+  persist();
+  if (p.d === true && settings().autoRest) startRest(settings().restSec);
+}
+
+function clearDay(day) {
+  const wk = wkNow();
+  if (S.log.weeks[wk]) day.items.forEach((it) => {
+    if (it.kind === "ex") delete S.log.weeks[wk][it.key];
+  });
+  if (S.log.sessions[wk]) delete S.log.sessions[wk][scopedDay(day.id)];
+  persist();
+}
+
+function setSetting(p) {
+  S.log.settings = Object.assign(settings(), p);
+  persist();
+}
+
+function setStart(id, v) {
+  const p = S.programs.find((x) => x.id === id);
+  if (p) {
+    p.start = v;
+    migrateAnchor();
+  }
+  persist();
+}
+
+/* ===== rest timer ===== */
+let restInt = null;
+let rang = false;
+function startRest(sec) {
+  rang = false;
+  S.rest = { end: Date.now() + sec * 1000, dur: sec };
+  clearInterval(restInt);
+  restInt = setInterval(tickRest, 250);
+  paintTimer();
+}
+function stopRest() {
+  clearInterval(restInt);
+  restInt = null;
+  S.rest = null;
+  const el = document.getElementById("timerbar");
+  if (el) el.remove();
+}
+function restLeft() {
+  return S.rest ? Math.max(0, Math.ceil((S.rest.end - Date.now()) / 1000)) : 0;
+}
+function tickRest() {
+  const left = restLeft();
+  if (left === 0 && !rang) {
+    rang = true;
+    beep();
+    if (navigator.vibrate) try { navigator.vibrate([120, 80, 120]); } catch (e) {}
+    clearInterval(restInt);
+    restInt = null;
+  }
+  paintTimer();
+}
+function paintTimer() {
+  let el = document.getElementById("timerbar");
+  if (!S.rest) {
+    if (el) el.remove();
+    return;
+  }
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "timerbar";
+    document.body.appendChild(el);
+  }
+  const left = restLeft();
+  const mm = Math.floor(left / 60);
+  const ss = String(left % 60).padStart(2, "0");
+  el.className = "timerbar" + (left === 0 ? " ding" : "");
+  el.innerHTML =
+    '<div class="wrap"><div class="in">' +
+    '<span style="color:' + (left === 0 ? "var(--ink)" : "var(--rest)") + '">&#9202;</span>' +
+    '<span class="t tnum">' + mm + ":" + ss + "</span>" +
+    '<button class="add" data-act="rest-add">+30s</button>' +
+    '<button class="x" data-act="rest-stop">&times;</button>' +
+    "</div></div>";
+}
+
+/* ===== helpers ===== */
+const esc = (s) =>
+  String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+  );
+const svg = (d, extra) =>
+  '<svg viewBox="0 0 24 24" ' + (extra || "") + ">" + d + "</svg>";
+const ICON = {
+  user: svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" stroke-linecap="round"/>'),
+  gear: svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" stroke-linejoin="round"/>'),
+  medal: svg('<circle cx="12" cy="14" r="5"/><path d="m9 9.5-3-6.5h4l2 4 2-4h4l-3 6.5" stroke-linejoin="round"/>'),
+  cal: svg('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18" stroke-linecap="round"/>'),
+  dumbbell: svg('<path d="M6.5 6.5v11M3 9v5M17.5 6.5v11M21 9v5M6.5 12h11" stroke-linecap="round"/>'),
+  notes: svg('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" stroke-linejoin="round"/><path d="M14 3v5h5M9 13h6M9 17h4" stroke-linecap="round"/>'),
+  layers: svg('<path d="M12 3 3 8l9 5 9-5-9-5Z" stroke-linejoin="round"/><path d="m3 14 9 5 9-5" stroke-linejoin="round"/>'),

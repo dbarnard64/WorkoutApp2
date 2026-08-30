@@ -1,0 +1,624 @@
+  const btns = d.querySelectorAll("button");
+  const i = Math.max(0, DOCK_TABS.findIndex(function (x) { return x[0] === S.tab; }));
+  btns.forEach(function (b, j) {
+    b.classList.toggle("on", j === i);
+    b.querySelector("i").style.transform = j === i ? "scale(1.12)" : "";
+  });
+  const lens = d.querySelector(".lens");
+  const first = d.dataset.i === undefined;
+  if (first) lens.style.transition = "none";
+  dockLensTo(d, i);
+  if (first) {
+    void lens.offsetWidth;
+    lens.style.transition = "";
+  }
+  d.dataset.i = i;
+}
+
+function dockLensTo(d, i) {
+  const lens = d.querySelector(".lens");
+  const inner = d.clientWidth - 12; /* padding */
+  const w = inner / DOCK_TABS.length;
+  lens.style.width = w + "px";
+  lens.style.transform = "translateX(" + i * w + "px)";
+}
+
+function dockTouch(d) {
+  let dragging = false, moved = false, startX = 0;
+  const lens = d.querySelector(".lens");
+  const near = (x) => {
+    const r = d.getBoundingClientRect();
+    const inner = r.width - 12;
+    const w = inner / DOCK_TABS.length;
+    return { r: r, w: w, i: Math.max(0, Math.min(DOCK_TABS.length - 1, Math.floor((x - r.left - 6) / w))) };
+  };
+  d.addEventListener("touchstart", function (e) {
+    dragging = true;
+    moved = false;
+    startX = e.touches[0].clientX;
+    lens.style.transition = "none";
+  }, { passive: true });
+  d.addEventListener("touchmove", function (e) {
+    if (!dragging) return;
+    const x = e.touches[0].clientX;
+    if (Math.abs(x - startX) > 6) moved = true;
+    const n = near(x);
+    const px = Math.max(0, Math.min(n.r.width - 12 - n.w, x - n.r.left - 6 - n.w / 2));
+    lens.style.transform = "translateX(" + px + "px)";
+    /* magnify what the lens hovers */
+    d.querySelectorAll("button").forEach(function (b) {
+      const br = b.getBoundingClientRect();
+      const c = br.left + br.width / 2;
+      const t = Math.max(0, 1 - Math.abs(x - c) / (br.width * 1.15));
+      b.querySelector("i").style.transform = "scale(" + (1 + 0.26 * t) + ") translateY(" + -3 * t + "px)";
+    });
+  }, { passive: true });
+  d.addEventListener("touchend", function (e) {
+    if (!dragging) return;
+    dragging = false;
+    lens.style.transition = "";
+    const x = (e.changedTouches[0] || {}).clientX || startX;
+    const n = near(x);
+    if (moved) {
+      const btn = d.querySelectorAll("button")[n.i];
+      btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    } else {
+      dockSync(true); /* plain tap: let the native click land, just settle the lens */
+    }
+  });
+}
+
+function vNavUnused() {
+  return (
+    ""
+  );
+}
+
+/* ===== sheets ===== */
+
+function sheetShell(eyebrow, title, body) {
+  return (
+    '<div class="scrim" data-act="sheet-bg"><div class="sheet"><div class="wrap">' +
+    '<div class="sheet-hd"><div>' +
+    (eyebrow ? '<div class="eyebrow on">' + esc(eyebrow) + "</div>" : "") +
+    "<h2>" + esc(title) + "</h2></div>" +
+    '<button class="iconbtn" data-act="sheet-close" style="font-size:20px">&times;</button></div>' +
+    '<div class="sheet-body">' + body + "</div></div></div></div>"
+  );
+}
+
+function summaryText(day, stats, dateLabel) {
+  const out = [
+    (day.title || day.name) + " · " + dateLabel,
+    stats.setsDone + " sets" + (stats.volume ? " · " + stats.volume.toLocaleString() + " kg lifted" : ""),
+    "",
+  ];
+  stats.lines.forEach((l) => {
+    out.push(
+      l.name + " — " + l.done + "/" + l.total + (l.best ? " · best " + l.best.w + "kg × " + l.best.r : "")
+    );
+  });
+  return out.join("\n");
+}
+
+function vSummarySheet() {
+  const dp = parsedProgram();
+  const day = dayAt(dp, S.dayIdx);
+  const stats = summarize(day, entriesFor, effWeek());
+  const session = sessionFor(day.id);
+  const cells = [
+    ["Sets", stats.setsDone],
+    ["Exercises", stats.exDone + "/" + stats.exTotal],
+    [U() + " lifted", stats.volume ? stats.volume.toLocaleString() : "\u2014"],
+  ]
+    .map(
+      (c) =>
+        '<div class="stat"><b class="tnum">' + esc(c[1]) + '</b><div class="eyebrow" style="margin-top:6px">' +
+        esc(c[0]) + "</div></div>"
+    )
+    .join("");
+  const lines = stats.lines.length
+    ? stats.lines
+        .map(
+          (l) =>
+            '<div class="sumline"><div class="grow"><div style="font-size:14px;font-weight:600">' +
+            esc(l.name) + "</div>" +
+            (l.best ? '<div class="tnum" style="color:var(--mute);font-size:12px">best ' + l.best.w + " kg × " + l.best.r + "</div>" : "") +
+            '</div><div class="count tnum" style="color:' +
+            (l.done === l.total ? "var(--brass)" : "var(--faint)") + '">' + l.done + "/" + l.total + "</div></div>"
+        )
+        .join("")
+    : '<div style="color:var(--faint);font-size:14px">Nothing ticked off yet. Tap the discs on each exercise as you go.</div>';
+  return sheetShell(
+    S.sheet.dateLabel,
+    day.title || day.name,
+    '<div class="stats">' + cells + "</div>" +
+      (stats.unweighted
+        ? '<p class="tnum" style="color:var(--faint);font-size:12px;margin-top:10px">' + stats.unweighted +
+          " ticked " + (stats.unweighted === 1 ? "set is" : "sets are") +
+          " missing weight or reps (drops included), so they are not in the volume total.</p>"
+        : "") +
+      '<div class="mt2" style="display:flex;flex-direction:column;gap:8px">' + lines + "</div>" +
+      '<div class="row mt3" style="gap:12px">' +
+      '<button class="btn-ghost" data-act="copy-summary">Copy</button>' +
+      '<button class="btn-primary" data-act="log-session">' +
+      (session ? "Save changes" : "Log this session") + "</button></div>" +
+      /* the riskiest moment for a phone-only log is right after a session */
+      '<button class="dash" style="height:46px;margin-top:12px" data-act="sum-backup">' +
+      (daysSinceBackup() === 0 ? "Backed up today \u2713" : "Save a backup of everything") + "</button>" +
+      '<p style="color:var(--faint);font-size:12px;line-height:1.5;margin:10px 0 0">' +
+      (daysSinceBackup() === null
+        ? "Nothing is backed up yet. This log lives only on this device, and deleting the home-screen icon deletes it."
+        : daysSinceBackup() === 0
+        ? "Kept somewhere off this device, your log survives a lost or reset phone."
+        : "Last backup was " + daysSinceBackup() + " days ago.") + "</p>"
+  );
+}
+
+function vProgramSheet() {
+  return sheetShell(
+    "Switch program",
+    "Your programs",
+    '<div style="display:flex;flex-direction:column;gap:12px">' +
+      S.programs.map((p) => vProgramRow(p, { del: false })).join("") +
+      '<div class="row" style="gap:12px">' +
+        '<button class="dash grow" data-act="new-prog">Paste text</button>' +
+        '<button class="dash grow" data-act="build-new">Build one</button></div></div>'
+  );
+}
+
+/* ===== confirm unclear exercises ===== */
+
+function vReviewSheet() {
+  const dp = parsedProgram();
+  const list = unclearList(dp);
+  const rows = list.length
+    ? list
+        .map(
+          (x, i) =>
+            '<div class="rev"><div class="nm">' + esc(x.name) + "</div>" +
+            '<div class="where">' + esc(x.day) + "</div>" +
+            '<div class="flds">' +
+            '<label class="fld"><input class="tnum" inputmode="numeric" placeholder="3" ' +
+            'data-in="fix-sets" data-n="' + esc(x.name) + '"><em>sets</em></label>' +
+            '<label class="fld"><input class="tnum" inputmode="text" placeholder="12" ' +
+            'data-in="fix-reps" data-n="' + esc(x.name) + '"><em>reps</em></label>' +
+            '<button class="badge" data-act="fix-skip" data-n="' + esc(x.name) + '">Leave it</button>' +
+            "</div></div>"
+        )
+        .join("")
+    : '<p style="color:var(--mute);font-size:14px">Nothing left to confirm &mdash; every exercise has sets and reps.</p>';
+  return sheetShell(
+    "Couldn't read these",
+    "Confirm sets & reps",
+    (list.length
+      ? '<p style="color:var(--mute);font-size:13px;line-height:1.6;margin:0 0 4px">These lines had no sets ' +
+        "or reps in the pasted text. Fill in what you do, or leave them as a single tick.</p>"
+      : "") +
+      rows +
+      (list.length
+        ? '<button class="btn-primary" style="margin-top:20px" data-act="fix-save">Save</button>'
+        : "")
+  );
+}
+
+function vRestoreSheet() {
+  return sheetShell(
+    "From a backup",
+    "Restore",
+    '<p style="color:var(--mute);font-size:13px;line-height:1.6;margin:0 0 12px">Paste the contents of a ' +
+      "backup file below. This replaces everything currently in the app.</p>" +
+      '<textarea data-in="restore-text" style="width:100%;min-height:160px;background:var(--ink);' +
+      'border:1px solid var(--line);border-radius:12px;padding:12px;font-size:13px" placeholder="{ ... }"></textarea>' +
+      '<button class="btn-primary" style="margin-top:16px" data-act="restore-go">Restore</button>'
+  );
+}
+
+/* ===== paste screen ===== */
+
+function savePasted(dp) {
+  if (S.editing === "new") {
+    const np = {
+      id: "p" + Date.now(),
+      raw: S.draft.text,
+      title: dp.title,
+      start: S.draft.start,
+    };
+    S.programs.push(np);
+    S.activeId = np.id;
+  } else {
+    const p = S.programs.find((x) => x.id === S.editing);
+    if (p) {
+      p.raw = S.draft.text;
+      p.title = dp.title;
+      p.start = S.draft.start;
+      S.activeId = p.id;
+    }
+  }
+  cacheRaw = null;
+  S.editing = null;
+  S.dayIdx = 0;
+  S.tab = "train";
+  seedToday();
+  persist();
+}
+
+function vPastePreview() {
+  const t = (S.draft.text || "").trim();
+  if (!t) return "";
+  const dp = parseProgram(t);
+  const ex = dp.days.reduce((a, d) => a + d.count, 0);
+  if (!ex)
+    return (
+      '<div class="warn" style="margin-top:16px">Nothing here reads as an exercise yet. Each one needs a ' +
+      "number of sets and reps &mdash; like <b>Deadlift &ndash; 5 sets x 8-10</b> &mdash; or a name, sets " +
+      "and reps on three separate lines.</div>"
+    );
+  return (
+    '<div class="block mt">' +
+    '<div class="eyebrow">Detected</div>' +
+    '<div class="ttl" style="font-size:22px;margin-top:6px">' + esc(dp.title) + "</div>" +
+    '<div class="sub tnum">' + dp.days.length + " days · " + ex + " exercises · " +
+    dp.info.length + " note sections" + (dp.length ? " · " + dp.length + " weeks" : "") + "</div>" +
+    '<div class="chips">' +
+    dp.days.map((d) => '<span class="pchip tnum">' + esc(d.name) + " · " + d.count + "</span>").join("") +
+    "</div>" +
+    '<div class="row mt" style="border-top:1px solid var(--line);padding-top:16px"><div class="sub">' +
+    (dp.days.length === 1 && !dp.length
+      ? "One-day workout &mdash; it lands under Grab-and-go, no start date needed."
+      : "You\u2019ll be asked when week 1 starts as you save.") +
+    "</div></div></div>"
+  );
+}
+
+function vSessSheet() {
+  const wk = S.sheet.wk, k = S.sheet.k;
+  const rec = (S.log.sessions[wk] || {})[k] || {};
+  const m = k.match(/^(.+):(d\d+)$/);
+  const pid = m ? m[1] : "", di = m ? m[2] : "";
+  const p = S.programs.find(function (x) { return x.id === pid; });
+  const dp = p ? parseProgram(p.raw) : null;
+  const dday = dp ? dp.days[+di.slice(1)] : null;
+  /* every logged exercise of that day, planned or added on the day */
+  const rx = new RegExp("^" + pid.replace(/[.*+?^$()|[\]\\{}]/g, "\\$&") + ":" + di + "(e|a)(\\d+)$");
+  const wkData = S.log.weeks[wk] || {};
+  const exKeys = Object.keys(wkData).filter(function (x) { return rx.test(x); })
+    .sort(function (x, y) {
+      const a2 = x.match(rx), b2 = y.match(rx);
+      return a2[1] === b2[1] ? +a2[2] - +b2[2] : a2[1] === "e" ? -1 : 1;
+    });
+  const nameFor = function (key) {
+    const ent = wkData[key] || {};
+    /* alt is what was actually done that day; n is the program slot it replaced */
+    let base = ent.n;
+    if (!base && dday) {
+      const it = dday.items.find(function (x) { return x.kind === "ex" && x.key && x.key.indexOf(key.slice(key.indexOf(":") + 1)) >= 0; });
+      if (it) base = it.name;
+    }
+    if (ent.alt && (!base || nn(ent.alt) !== nn(base)))
+      return { name: ent.alt, sub: base ? "instead of " + base : "" };
+    return { name: base || "Exercise", sub: "" };
+  };
+  const fmtSet = function (st) {
+    const w = (st.w || "").trim(), r = (st.r || "").trim();
+    if (!w && !r) return "&mdash;";
+    if (!w) return esc(r) + " reps";
+    return esc(w) + " " + U() + " &times; " + (r ? esc(r) : "&mdash;");
+  };
+  const body = exKeys.length
+    ? exKeys.map(function (key) {
+        const ent = wkData[key];
+        const sets = setIdx(ent).sort(function (a2, b2) { return +a2 - +b2; });
+        const rowsH = sets.map(function (si, i) {
+          const st = ent[si] || {};
+          let h =
+            '<div class="ssrow' + (st.d ? "" : " dim") + '"><b class="tnum">' + (i + 1) + "</b>" +
+            '<span class="tnum">' + fmtSet(st) + "</span>" +
+            '<i>' + (st.d ? "&#10003;" : "&#9675;") + "</i></div>";
+          (st.dr || []).forEach(function (dr, j) {
+            h += '<div class="ssrow drop' + (st.d ? "" : " dim") + '"><b>&#8627;</b>' +
+              '<span class="tnum">drop ' + (j + 1) + " &middot; " + fmtSet(dr) + "</span><i></i></div>";
+          });
+          return h;
+        }).join("");
+        const nm = nameFor(key);
+        return (
+          '<div class="ssex"><div class="ssname">' + esc(nm.name) + "</div>" +
+          (nm.sub ? '<div class="sssub">' + esc(nm.sub) + "</div>" : "") +
+          '<div class="sshead"><b>Set</b><span>Weight &amp; reps</span><i></i></div>' + rowsH + "</div>"
+        );
+      }).join("")
+    : '<p style="color:var(--faint);font-size:13px;margin:0">No set-by-set data survives for this session ' +
+      "&mdash; only the totals were kept.</p>";
+  const dt = new Date((rec.d || ymd(new Date(rec.at))) + "T00:00:00");
+  return sheetShell(
+    dt.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" }),
+    (rec.gg ? rec.pn : rec.dn || rec.pn) || "Session",
+    '<div class="ssmeta tnum">' + (rec.sets || 0) + " sets" +
+    (rec.volume ? " &middot; " + Math.round(rec.volume).toLocaleString() + " " + U() : "") + "</div>" + body
+  );
+}
+
+function vStartAskSheet() {
+  return sheetShell(
+    "One more thing",
+    "When does week 1 start?",
+    '<p style="color:var(--mute);font-size:14px;line-height:1.6;margin:0">' +
+    esc(
+      isNumberedDp(parseProgram(S.draft.text))
+        ? humanStart(S.draft.start, true) + " \u2014 numbered days run from the day you pick."
+        : humanMonday(S.draft.start) + " \u2014 pick any day in that week."
+    ) + "</p>" +
+    '<input type="date" class="datefld tnum" style="margin-top:14px;width:100%" value="' +
+    esc(S.draft.start) + '" data-in="paste-start">' +
+    '<button class="btn-primary" style="width:100%;margin-top:16px" data-act="startask-go">Start this program</button>' +
+    '<button class="btn-ghost" style="width:100%;margin-top:10px" data-act="startask-cancel">Back to the text</button>'
+  );
+}
+
+function vPaste() {
+  const t = (S.draft.text || "").trim();
+  const dp = t ? parseProgram(t) : null;
+  const ok = !!(dp && dp.days.length && dp.days.reduce((a, d) => a + d.count, 0) > 0);
+  return (
+    '<div class="paste"><div class="wrap">' +
+    '<div class="top"><div><div class="eyebrow on">Paste a program</div>' +
+    "<h1>Drop the text in</h1>" +
+    "<p>Copy a program from anywhere. Keep day names like Monday or Day 1 on their own line &mdash; " +
+    "everything under them becomes exercises.</p></div>" +
+    (S.programs.length
+      ? '<button class="iconbtn" data-act="paste-cancel" style="font-size:20px">&times;</button>'
+      : "") +
+    "</div>" +
+    '<div class="mid"><textarea data-in="paste-text" placeholder="Monday &ndash; Chest&#10;Bench Press&#10;4&#10;8&ndash;10&#10;Cable Fly &ndash; 3&times;15">' +
+    esc(S.draft.text) + "</textarea>" +
+    '<div id="preview">' + vPastePreview() + "</div></div>" +
+    '<div class="foot"><button class="btn-ghost" data-act="paste-example">Use example</button>' +
+    '<button class="btn-primary" data-act="paste-save"' + (ok ? "" : " disabled") + ">Save program</button>" +
+    "</div></div></div>"
+  );
+}
+
+/* ===== render ===== */
+
+function focusSnapshot() {
+  const el = document.activeElement;
+  if (!el || !el.dataset || !el.dataset.in) return null;
+  return {
+    in: el.dataset.in,
+    key: el.dataset.key || "",
+    i: el.dataset.i || "",
+    d: el.dataset.d || "",
+    start: el.selectionStart,
+    end: el.selectionEnd,
+  };
+}
+
+function focusRestore(f) {
+  if (!f) return;
+  let sel = '[data-in="' + f.in + '"]';
+  if (f.key) sel += '[data-key="' + f.key + '"]';
+  if (f.i) sel += '[data-i="' + f.i + '"]';
+  if (f.d) sel += '[data-d="' + f.d + '"]';
+  const el = document.querySelector(sel);
+  if (!el) return;
+  try {
+    el.focus({ preventScroll: true });
+    if (f.start != null && el.setSelectionRange) el.setSelectionRange(f.start, f.end);
+  } catch (e) {}
+}
+
+function render() {
+  const f = focusSnapshot();
+  renderInner();
+  focusRestore(f);
+}
+
+function renderInner() {
+  const y = window.scrollY;
+  const app = document.getElementById("app");
+
+  if (S.editing === "build") {
+    app.innerHTML = vBuild();
+    dockSync(false);
+    return;
+  }
+
+  if (S.editing) {
+    app.innerHTML = vPaste() + (S.sheet ? vSheet() : "");
+    paintTimer();
+    dockSync(false);
+    return;
+  }
+
+  const dp = parsedProgram();
+  if (!dp || !dp.days.length) {
+    app.innerHTML =
+      '<div class="center"><div class="eyebrow on">No days found</div>' +
+      '<p style="color:var(--mute);font-size:14px;line-height:1.6">Put each day on its own line &mdash; ' +
+      "Monday, Tuesday, or Day 1 &mdash; then the exercises underneath it.</p>" +
+      '<button class="btn-primary" style="max-width:220px" data-act="edit-active">Edit the text</button></div>';
+    return;
+  }
+
+  let body = "";
+  if (S.tab === "bests" || S.tab === "notes" || S.tab === "progress" || S.tab === "settings") S.tab = "profile";
+  if (S.tab === "train") body = vTrain(dp);
+  else if (S.tab === "profile") body = vProfile();
+  else body = vLibrary();
+
+  const PAGE_NAME = { style: "Style", settings: "Settings", pbs: "Personal bests", measures: "Measures", calendar: "Calendar" };
+  let head;
+  if (S.tab === "train") head = vHeader();
+  else if (S.tab === "profile" && S.page) head = vSubHead(PAGE_NAME[S.page] || "Profile");
+  else head = vTabHead(S.tab === "profile" ? "Profile" : "Programs");
+  app.innerHTML = head + body + (S.sheet ? vSheet() : "");
+  dockSync(true);
+  const os = document.getElementById("offline-state");
+  if (os) os.textContent = offlineState;
+  paintTimer();
+  window.scrollTo(0, y);
+}
+
+function vSheet() {
+  if (S.sheet.type === "startask") return vStartAskSheet();
+  if (S.sheet.type === "sess") return vSessSheet();
+  if (S.sheet.type === "summary") return vSummarySheet();
+  if (S.sheet.type === "programs") return vProgramSheet();
+  if (S.sheet.type === "review") return vReviewSheet();
+  if (S.sheet.type === "restore") return vRestoreSheet();
+  if (S.sheet.type === "pb") return vPBSheet();
+  if (S.sheet.type === "notes") return vNotesSheet();
+  if (S.sheet.type === "swap") return vSwapSheet();
+  if (S.sheet.type === "addex") return vAddExSheet();
+  return "";
+}
+
+/* ===== themes ===== */
+const THEMES = {
+  brass: { name: "Iron & Brass", ink: "#15110E", panel: "#1E1815", panel2: "#26201B", line: "#332A22",
+    chalk: "#F3EEE5", mute: "#9A8E80", faint: "#6B6157", brass: "#D3A03C", brassDim: "#8A6A26",
+    onAccent: "#15110E", rest: "#5E8C6A" },
+  midnight: { name: "Midnight Steel", ink: "#0E1116", panel: "#161B22", panel2: "#1C232C", line: "#2A323D",
+    chalk: "#E8EDF3", mute: "#8B97A6", faint: "#5D6875", brass: "#5EA9E6", brassDim: "#2C5F86",
+    onAccent: "#0E1116", rest: "#4F9E86" },
+  crimson: { name: "Blood & Rust", ink: "#16100F", panel: "#201615", panel2: "#291D1B", line: "#3A2724",
+    chalk: "#F4EAE7", mute: "#A08D89", faint: "#6E5C59", brass: "#D6483F", brassDim: "#8A2C26",
+    onAccent: "#16100F", rest: "#5E8C6A" },
+  forest: { name: "Deep Forest", ink: "#0F1411", panel: "#171E19", panel2: "#1D2620", line: "#2A362D",
+    chalk: "#E9F0EA", mute: "#8C9A8F", faint: "#5F6C62", brass: "#6FBF73", brassDim: "#38753D",
+    onAccent: "#0F1411", rest: "#6FBF73" },
+  mono: { name: "Chalk on Slate", ink: "#101010", panel: "#1A1A1A", panel2: "#222222", line: "#2E2E2E",
+    chalk: "#F2F2F2", mute: "#9A9A9A", faint: "#6A6A6A", brass: "#F2F2F2", brassDim: "#7A7A7A",
+    onAccent: "#101010", rest: "#8A8A8A" },
+  daylight: { name: "Daylight", ink: "#F5F2EC", panel: "#FFFFFF", panel2: "#EDE8DF", line: "#DAD3C7",
+    chalk: "#1E1A16", mute: "#6B6157", faint: "#9A9187", brass: "#B87A1E", brassDim: "#C9A45E",
+    onAccent: "#FFFFFF", rest: "#3F7A55" },
+};
+
+function shade(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) =>
+    Math.max(0, Math.min(255, Math.round(v * amt)))
+  );
+  return "#" + c.map((v) => v.toString(16).padStart(2, "0")).join("");
+}
+function readable(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const l = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+  return l > 0.6 ? "#141414" : "#FFFFFF";
+}
+
+function applyTheme() {
+  const st = settings();
+  const t = THEMES[st.theme] || THEMES.brass;
+  const r = document.documentElement.style;
+  Object.keys(t).forEach((k) => {
+    if (k !== "name") r.setProperty("--" + k, t[k]);
+  });
+  if (st.accent) {
+    r.setProperty("--brass", st.accent);
+    r.setProperty("--brassDim", shade(st.accent, 0.62));
+    r.setProperty("--onAccent", readable(st.accent));
+  }
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", t.ink);
+}
+
+/* ===== reps wording ===== */
+function repsLabel(reps) {
+  if (!reps) return "";
+  if (/^[\d\s\u2013\u2014\-\/]+$/.test(reps)) return reps + " reps";
+  return reps;
+}
+/* One day, no week structure: a grab-and-go workout, not a program. */
+function isSingle(p) {
+  if (!p) return false;
+  const dp = applyFixes(parseProgram(p.raw), p.fixes);
+  return dp.days.length === 1 && !dp.length;
+}
+function activeIsSingle() {
+  return isSingle(activeProgram());
+}
+
+function prescription(it) {
+  if (isTimed(it)) {
+    const m = ((it.name || "") + " " + (it.reps || "")).match(
+      /\d+\s*(?:[\u2013\u2014-]\s*\d+)?\s*(?:min|mins|minutes)\b/i
+    );
+    return m ? m[0].replace(/\bmins?\b/i, "minutes") : "timed";
+  }
+  const n = setsFor(it);
+  const s = n + (n === 1 ? " set" : " sets");
+  const r = repsLabel(it.reps);
+  const joiner = /^(to\s|failure|amrap|max)/i.test(r) ? " " : " \u00d7 ";
+  let base = r ? s + joiner + r : s;
+  if (it.drop) base += " \u00b7 " + (it.drop === 2 ? "double " : it.drop === 3 ? "triple " : "") + "drop last set";
+  return it.sets && n !== it.sets ? base + " \u00b7 was " + it.sets : base;
+}
+
+/* ===== unclear exercises + user fixes ===== */
+/* "20-30 minutes incline treadmill walking" is something you do, not something
+   you load. A minutes figure in the name or reps makes an item timed: tick it
+   done, nothing to weigh. */
+function isTimed(it) {
+  const t = (it.name || "") + " " + (it.reps || "");
+  return /\d+\s*(?:[\u2013\u2014-]\s*\d+)?\s*(?:min|mins|minutes)\b/i.test(t);
+}
+
+function isUnclear(it) {
+  return it.kind === "ex" && !isTimed(it) && (!it.sets || !it.reps);
+}
+function applyFixes(dp, fixes) {
+  if (!fixes) return dp;
+  dp.days.forEach((d) =>
+    d.items.forEach((it) => {
+      if (it.kind !== "ex") return;
+      const f = fixes[nn(it.name)];
+      if (!f) return;
+      if (f.skip) {
+        it.confirmed = true;
+        return;
+      }
+      if (f.sets) it.sets = +f.sets;
+      if (f.reps) it.reps = f.reps;
+      it.confirmed = true;
+    })
+  );
+  return dp;
+}
+function unclearList(dp) {
+  const out = [];
+  dp.days.forEach((d) =>
+    d.items.forEach((it) => {
+      if (isUnclear(it) && !it.confirmed) out.push({ name: it.name, day: d.title || d.name });
+    })
+  );
+  const seen = {};
+  return out.filter((x) => {
+    const k = nn(x.name);
+    if (seen[k]) return false;
+    seen[k] = 1;
+    return true;
+  });
+}
+
+/* ===== backup ===== */
+function backupJSON() {
+  return JSON.stringify(
+    { app: "ironlog", version: 1, exported: new Date().toISOString(),
+      programs: S.programs, activeId: S.activeId, log: S.log },
+    null, 2
+  );
+}
+function downloadBackup() {
+  const name = "iron-log-backup-" + new Date().toISOString().slice(0, 10) + ".json";
+  try {
+    const blob = new Blob([backupJSON()], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {

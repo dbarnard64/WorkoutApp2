@@ -1,0 +1,796 @@
+    '<div class="mid">' +
+    '<div class="block"><label class="fld"><input placeholder="Program name" value="' + esc(b.title) +
+    '" data-in="b-title"></label>' +
+    '<div class="row" style="gap:8px;margin-top:12px">' +
+    '<div class="grow"><div class="eyebrow">Week 1 starts</div>' +
+    '<input type="date" class="datefld tnum" style="margin-top:6px;width:100%" value="' + esc(b.start) +
+    '" data-in="b-start"></div>' +
+    '<div style="width:100px"><div class="eyebrow">Weeks</div>' +
+    '<label class="fld" style="margin-top:6px"><input class="tnum" inputmode="numeric" value="' +
+    esc(b.weeks) + '" data-in="b-weeks"></label></div></div></div>' +
+
+    days +
+    '<button class="dash" style="margin-top:12px" data-act="b-add-day">+ Add day</button>' +
+
+    (b.days.length
+      ? '<button class="link" style="display:block;margin-top:18px" data-act="b-preview">' +
+        (b.preview ? "Hide the text" : "Show the text this makes") + "</button>" +
+        (b.preview
+          ? '<pre style="white-space:pre-wrap;background:var(--ink);border:1px solid var(--line);' +
+            'border-radius:12px;padding:12px;font-size:12px;color:var(--mute);margin-top:8px">' +
+            esc(buildText(b)) + "</pre>"
+          : "")
+      : "") +
+    "</div>" +
+
+    '<div class="foot"><button class="btn-ghost" data-act="b-cancel">Cancel</button>' +
+    '<button class="btn-primary" data-act="b-save"' + (buildValid(b) ? "" : " disabled") +
+    ">Save program</button></div></div></div>"
+  );
+}
+
+/* ===== clipboard (works on file:// too) ===== */
+function copyText(str, btn) {
+  const done = () => {
+    if (btn) {
+      const old = btn.textContent;
+      btn.textContent = "Copied";
+      setTimeout(() => {
+        btn.textContent = old;
+      }, 1600);
+    }
+  };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(str).then(done, () => fallback(str, done));
+  } else fallback(str, done);
+}
+function fallback(str, done) {
+  const ta = document.createElement("textarea");
+  ta.value = str;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  ta.setSelectionRange(0, str.length);
+  try {
+    document.execCommand("copy");
+    done();
+  } catch (e) {}
+  document.body.removeChild(ta);
+}
+
+/* a set with both a weight and reps in it is a set you did */
+let tickTimer = null;
+/* A drop set is one unit of work: until every child has weight and reps,
+   the whole set stays out of the totals and off the auto-tick. */
+function dropsComplete(s2) {
+  return (s2.dr || []).every(function (d2) {
+    return (
+      String(d2.w == null ? "" : d2.w).trim() !== "" &&
+      String(d2.r == null ? "" : d2.r).trim() !== "" &&
+      !isNaN(numOf(d2.w)) &&
+      !isNaN(numOf(d2.r))
+    );
+  });
+}
+
+function autoTick(key, i, name) {
+  if (!settings().autoTick) return;
+  const wk = wkNow();
+  const ex = S.log.weeks[wk] && S.log.weeks[wk][key];
+  if (!ex) return;
+  const s2 = ex[i];
+  if (!s2 || s2.d) return;
+  const hasW = String(s2.w == null ? "" : s2.w).trim() !== "";
+  const hasR = String(s2.r == null ? "" : s2.r).trim() !== "";
+  if (!hasW || !hasR) return;
+  if (!dropsComplete(s2)) return;
+  s2.d = true;
+  if (name) ex.n = name;
+  persist();
+  if (settings().autoRest) startRest(settings().restSec);
+  render();
+}
+
+/* ===== events ===== */
+
+function currentDay() {
+  const dp = parsedProgram();
+  return dayAt(dp, S.dayIdx);
+}
+function currentDateLabel() {
+  const day = currentDay();
+  const wd = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"].indexOf(
+    day.name.toLowerCase()
+  );
+  const a0 = progAnchorISO();
+  const d = a0 ? anchorOf(S.weekOff) : mondayOf(S.weekOff);
+  d.setDate(d.getDate() + (a0 ? Math.min(S.dayIdx, 6) : wd >= 0 ? wd : Math.min(S.dayIdx, 6)));
+  return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+}
+
+document.addEventListener("click", (ev) => {
+  const el = ev.target.closest("[data-act]");
+  if (!el) return;
+  const a = el.dataset.act;
+
+  if (a === "sheet-bg" && ev.target !== el) return;
+
+  switch (a) {
+    case "prog-open":
+      S.sheet = { type: "programs" };
+      break;
+    case "sheet-close":
+    case "sheet-bg":
+      S.sheet = null;
+      break;
+    case "wk-prev":
+      S.weekOff--;
+      break;
+    case "wk-next":
+      S.weekOff++;
+      break;
+    case "tab":
+      S.page = null;
+      S.tab = el.dataset.t;
+      S.reorder = false;
+      break;
+    case "day":
+      S.dayIdx = +el.dataset.i;
+      S.openEx = null;
+      S.reorder = false;
+      break;
+    case "expand":
+      S.openEx = S.openEx === el.dataset.key ? null : el.dataset.key;
+      break;
+    case "tick": {
+      const k = el.dataset.key;
+      const i = +el.dataset.i;
+      const e = entriesFor(k);
+      patch(k, i, { d: !(e[i] && e[i].d) }, el.dataset.name);
+      break;
+    }
+    case "clear-day":
+      if (confirm("Clear everything logged for this day?")) clearDay(currentDay());
+      break;
+    case "finish":
+      S.sheet = { type: "summary", dateLabel: currentDateLabel() };
+      break;
+    case "sum-backup":
+      downloadBackup();
+      markBackedUp();
+      break;
+    case "log-session": {
+      const day = currentDay();
+      stampDeloadDay(day);
+      const stats = summarize(day, entriesFor, effWeek());
+      const wk = wkNow();
+      const ap = activeProgram();
+      const singleNow = activeIsSingle();
+      S.log.sessions[wk] = S.log.sessions[wk] || {};
+      S.log.sessions[wk][scopedDay(day.id)] = {
+        at: new Date().toISOString(),
+        d: sessionDayISO(wk, day, singleNow),
+        sets: stats.setsDone,
+        volume: stats.volume,
+        pn: ap ? ap.title : "",
+        dn: singleNow ? "" : day.title || day.name || "",
+        gg: singleNow ? 1 : 0,
+      };
+      if (singleNow) {
+        S.log.wo = S.log.wo && S.log.wo.id === ap.id
+          ? Object.assign({}, S.log.wo, { logged: true, doneName: ap.title })
+          : { id: ap.id, resume: null, day: todayISO(), logged: true, doneName: ap.title };
+      }
+      persist();
+      S.sheet = null;
+      break;
+    }
+    case "copy-summary": {
+      const day = currentDay();
+      copyText(summaryText(day, summarize(day, entriesFor, effWeek()), currentDateLabel()), el);
+      return;
+    }
+    case "copy-last": {
+      const n = copyLastWeek(currentDay());
+      if (!n) alert("Nothing from last week matched the lifts in this day.");
+      break;
+    }
+    case "unit": {
+      const u = el.dataset.u;
+      if (u === unit()) return;
+      const has =
+        Object.keys(S.log.weeks || {}).length ||
+        (S.log.body && Object.keys(S.log.body).length) ||
+        (S.log.pbs && Object.keys(S.log.pbs).length);
+      if (has && confirm("Convert everything already logged to " + u + "?")) {
+        convertAll(u);
+      } else {
+        setSetting({ unit: u });
+      }
+      break;
+    }
+    case "nudge":
+      setSetting({ nudge: settings().nudge === false });
+      break;
+    case "refresh-app":
+      try {
+        if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+          navigator.serviceWorker
+            .getRegistrations()
+            .then((rs) => Promise.all(rs.map((r) => r.update())))
+            .then(() =>
+              window.caches
+                ? caches.keys().then((ks) => Promise.all(ks.map((k) => caches.delete(k))))
+                : null
+            )
+            .then(() => location.reload())
+            .catch(() => location.reload());
+          return;
+        }
+      } catch (e) {}
+      location.reload();
+      return;
+    case "sets-plus":
+    case "sets-minus": {
+      const k = el.dataset.key;
+      const dp2 = parsedProgram();
+      let it2 = null;
+      dp2.days.forEach(function (d) {
+        d.items.forEach(function (x) {
+          if (x.key === k) it2 = x;
+        });
+      });
+      if (!it2) {
+        const e3 = (S.log.weeks[wkNow()] || {})[k];
+        if (e3 && /:d\d+a\d+$/.test(k)) {
+          const cur2 = e3.sets || 1;
+          e3.sets = a === "sets-plus" ? Math.min(20, cur2 + 1) : Math.max(1, cur2 - 1);
+          persist();
+          render();
+        }
+        return;
+      }
+      const cur = setsFor(it2);
+      const next = a === "sets-plus" ? Math.min(20, cur + 1) : Math.max(1, cur - 1);
+      const base = deloadActive() ? Math.max(1, Math.round((it2.sets || 1) * 0.5)) : it2.sets || 1;
+      writeEntry(k, "sets", next === base ? null : next, el.dataset.name);
+      break;
+    }
+    case "swap-open":
+      S.sheet = { type: "swap", key: el.dataset.key, orig: el.dataset.orig,
+        name: entryField(el.dataset.key, "alt") || "" };
+      break;
+    case "swap-save": {
+      const sp = S.sheet;
+      const nm = (sp.name || "").trim();
+      writeEntry(sp.key, "alt", !nm || nn(nm) === nn(sp.orig) ? null : nm, sp.orig);
+      S.sheet = null;
+      break;
+    }
+    case "swap-revert":
+      writeEntry(S.sheet.key, "alt", null, S.sheet.orig);
+      S.sheet = null;
+      break;
+    case "day-reset":
+      writeEntry(el.dataset.key, "sets", null, el.dataset.name);
+      writeEntry(el.dataset.key, "alt", null, el.dataset.name);
+      break;
+    case "addex-open":
+      S.sheet = { type: "addex", di: currentDayIndex(), name: "", sets: "", reps: "" };
+      break;
+    case "ax-save": {
+      const sh = S.sheet;
+      const nm = (sh.name || "").trim();
+      if (!nm) {
+        alert("Give it a name first, or Cancel.");
+        return;
+      }
+      const wk = wkNow();
+      if (!S.log.weeks[wk]) S.log.weeks[wk] = {};
+      const pid = activeProgram().id;
+      let n = 0;
+      while (S.log.weeks[wk][pid + ":d" + sh.di + "a" + n]) n++;
+      const sets = Math.min(20, Math.max(1, parseInt(sh.sets, 10) || 3));
+      S.log.weeks[wk][pid + ":d" + sh.di + "a" + n] = { n: nm, sets: sets, reps: (sh.reps || "").trim() };
+      persist();
+      S.sheet = null;
+      break;
+    }
+    case "extra-remove": {
+      const k = el.dataset.key;
+      const e2 = (S.log.weeks[wkNow()] || {})[k];
+      const has = e2 && setIdx(e2).some(function (i) { return e2[i] && e2[i].d; });
+      if (has && !confirm("Remove this exercise and its logged sets for today?")) return;
+      delete S.log.weeks[wkNow()][k];
+      persist();
+      break;
+    }
+    case "drop-add": {
+      const wk2 = wkNow();
+      if (!S.log.weeks[wk2]) S.log.weeks[wk2] = {};
+      const ex2 = (S.log.weeks[wk2][el.dataset.key] = S.log.weeks[wk2][el.dataset.key] || {});
+      if (el.dataset.name && !ex2.n) ex2.n = el.dataset.name;
+      const st2 = (ex2[el.dataset.i] = ex2[el.dataset.i] || {});
+      st2.dr = st2.dr || [];
+      let seed = Math.max(1, +el.dataset.dn || 1);
+      while (seed-- > 0 && st2.dr.length < 4) st2.dr.push({ w: "", r: "" });
+      persist();
+      break;
+    }
+    case "drop-del": {
+      const e4 = (S.log.weeks[wkNow()] || {})[el.dataset.key];
+      const st3 = e4 && e4[el.dataset.i];
+      if (st3 && st3.dr) {
+        st3.dr.splice(+el.dataset.j, 1);
+        if (!st3.dr.length) delete st3.dr;
+        persist();
+      }
+      break;
+    }
+    case "notes-open":
+      S.sheet = { type: "notes" };
+      break;
+    case "reorder-on":
+      S.reorder = true;
+      S.openEx = null;
+      break;
+    case "reorder-off":
+      S.reorder = false;
+      break;
+    case "mv-up":
+      moveItem(currentDay(), +el.dataset.i, -1);
+      break;
+    case "mv-dn":
+      moveItem(currentDay(), +el.dataset.i, 1);
+      break;
+    case "order-reset":
+      resetOrder(currentDay());
+      break;
+    case "deload": {
+      const pr = S.programs.find((x) => x.id === el.dataset.id);
+      if (pr) {
+        pr.deload = !pr.deload;
+        persist();
+      }
+      break;
+    }
+    case "pb-edit": {
+      const best = effectiveBests();
+      const k = el.dataset.k;
+      const b = best[k] || { name: "", w: "", r: "" };
+      S.sheet = { type: "pb", key: k, name: b.name || "", w: b.w == null ? "" : String(b.w),
+        r: b.r == null ? "" : String(b.r), src: b.src, isNew: false,
+        cat: catOf(k, b.name, dayTitleIndex()), catAuto: !userCats()[k] };
+      break;
+    }
+    case "pb-toggle": {
+      const c = el.dataset.c;
+      if (!S.pbOpen) S.pbOpen = {};
+      if (S.pbOpen[c]) delete S.pbOpen[c];
+      else S.pbOpen[c] = true;
+      break;
+    }
+    case "pb-search-clear":
+      S.pbQuery = "";
+      break;
+    case "pb-setcat":
+      S.sheet.cat = el.dataset.c;
+      S.sheet.catAuto = false;
+      break;
+    case "pb-new":
+      S.sheet = { type: "pb", key: null, name: "", w: "", r: "", isNew: true, cat: "other",
+        catAuto: true };
+      break;
+    case "pb-save": {
+      const p2 = S.sheet;
+      const name = (p2.name || "").trim();
+      const w = numOf(p2.w);
+      if (!name || isNaN(w)) {
+        alert("A name and a weight are both needed.");
+        return;
+      }
+      const man = manualPBs();
+      const newKey = nn(name);
+      if (p2.key && p2.key !== newKey) man[p2.key] = { hidden: true };
+      man[newKey] = { name: name, w: String(p2.w).trim(), r: String(p2.r || "").trim() };
+      const auto = guessCat(name, dayTitleIndex()[newKey]);
+      if (p2.cat && p2.cat !== auto) userCats()[newKey] = p2.cat;
+      else delete userCats()[newKey];
+      /* show where it landed rather than letting it vanish */
+      if (!S.pbOpen) S.pbOpen = {};
+      S.pbOpen[p2.cat || auto] = true;
+      persist();
+      S.sheet = null;
+      break;
+    }
+    case "pb-remove": {
+      const p3 = S.sheet;
+      if (!p3.key) {
+        S.sheet = null;
+        break;
+      }
+      if (!confirm("Remove this from the list? Logged sets are not deleted.")) return;
+      const man2 = manualPBs();
+      if (p3.src === "manual" && !bestIndex(null)[p3.key]) delete man2[p3.key];
+      else man2[p3.key] = { hidden: true };
+      persist();
+      S.sheet = null;
+      break;
+    }
+    case "review":
+      S.pendingFix = {};
+      S.sheet = { type: "review" };
+      break;
+    case "fix-skip":
+      S.pendingFix = S.pendingFix || {};
+      S.pendingFix[nn(el.dataset.n)] = { skip: true };
+      saveFixes();
+      S.sheet = { type: "review" };
+      break;
+    case "fix-save":
+      saveFixes();
+      S.sheet = null;
+      break;
+    case "theme":
+      setSetting({ theme: el.dataset.k });
+      applyTheme();
+      break;
+    case "accent-reset":
+      setSetting({ accent: null });
+      applyTheme();
+      break;
+    case "backup-copy":
+      copyText(backupJSON(), el);
+      markBackedUp();
+      return;
+    case "backup-file":
+      downloadBackup();
+      markBackedUp();
+      break;
+    case "nag-backup":
+      downloadBackup();
+      markBackedUp();
+      S.tab = "profile";
+      S.page = "settings";
+      break;
+    case "nag-hide":
+      setSetting({ hideBackupBar: true });
+      break;
+    case "restore":
+      S.restoreText = "";
+      S.sheet = { type: "restore" };
+      break;
+    case "restore-go":
+      if (!restoreBackup(S.restoreText || "")) return;
+      break;
+    case "autotick":
+      setSetting({ autoTick: settings().autoTick === false });
+      break;
+    case "autorest":
+      setSetting({ autoRest: !settings().autoRest });
+      break;
+    case "restsec":
+      setSetting({ restSec: +el.dataset.s });
+      break;
+    case "rest-add":
+      startRest(restLeft() + 30);
+      return;
+    case "rest-stop":
+      stopRest();
+      return;
+    case "page":
+      S.page = el.dataset.p || null;
+      break;
+    case "sess-open":
+      S.sheet = { type: "sess", wk: el.dataset.wk, k: el.dataset.k };
+      break;
+    case "start-now": {
+      const p2 = activeProgram();
+      if (p2) {
+        p2.start = progAnchorISO() ? todayISO() : ymd(new Date(mondayOf(0)));
+        migrateAnchor();
+        persist();
+      }
+      break;
+    }
+    case "cal-today":
+      S.calM = null;
+      S.calD = todayISO();
+      break;
+    case "cal-day":
+      S.calD = el.dataset.d;
+      break;
+    case "cal-prev":
+    case "cal-next": {
+      const now = new Date();
+      const cm = S.calM || now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+      const y = +cm.slice(0, 4), m = +cm.slice(5, 7) - 1 + (a === "cal-next" ? 1 : -1);
+      const d2 = new Date(y, m, 1);
+      S.calM = d2.getFullYear() + "-" + String(d2.getMonth() + 1).padStart(2, "0");
+      break;
+    }
+    case "ton-week":
+      S.tonSel = el.dataset.w;
+      break;
+    case "wo-cat":
+      S.woCat = el.dataset.c;
+      break;
+    case "wo-resume": {
+      const wo0 = S.log.wo;
+      if (wo0 && wo0.resume && S.programs.some(function (x) { return x.id === wo0.resume; }))
+        S.activeId = wo0.resume;
+      S.log.wo = null;
+      S.dayIdx = 0;
+      S.openEx = null;
+      seedToday();
+      persist();
+      break;
+    }
+    case "wo-pick":
+    case "pick-prog": {
+      const target = S.programs.find(function (x) { return x.id === el.dataset.id; });
+      if (!target) break;
+      if (isSingle(target)) {
+        const prevResume =
+          S.log.wo && S.log.wo.resume
+            ? S.log.wo.resume
+            : activeIsSingle()
+              ? null
+              : S.activeId;
+        S.log.wo = { id: target.id, resume: prevResume, day: todayISO(), logged: false };
+      } else {
+        S.log.wo = null;
+      }
+      S.activeId = el.dataset.id;
+      S.dayIdx = 0;
+      S.openEx = null;
+      S.sheet = null;
+      S.tab = "train";
+      seedToday();
+      persist();
+      break;
+    }
+    case "edit-prog":
+    case "edit-active": {
+      const id = el.dataset.id || S.activeId;
+      const p = S.programs.find((x) => x.id === id);
+      S.editing = id;
+      S.draft = { text: p ? p.raw : "", start: (p && p.start) || mondayISO() };
+      S.sheet = null;
+      break;
+    }
+    case "copy-prog": {
+      const p = S.programs.find((x) => x.id === el.dataset.id);
+      if (p) copyText(p.raw);
+      alert("Program text copied. Send it to a friend and they can paste it into their own copy.");
+      return;
+    }
+    case "del-prog": {
+      const p = S.programs.find((x) => x.id === el.dataset.id);
+      if (!p || !confirm('Delete "' + p.title + '"? Logged sets are kept.')) return;
+      S.programs = S.programs.filter((x) => x.id !== p.id);
+      if (S.activeId === p.id) S.activeId = S.programs[0] && S.programs[0].id;
+      persist();
+      break;
+    }
+    case "build-new":
+      S.build = newBuild();
+      S.editing = "build";
+      S.sheet = null;
+      break;
+    case "b-cancel":
+      S.editing = null;
+      break;
+    case "b-preview":
+      S.build.preview = !S.build.preview;
+      break;
+    case "b-add-day": {
+      const used = S.build.days.map((d) => d.name);
+      const next = DAY_CHOICES.find((c) => used.indexOf(c) < 0) || "Day 1";
+      S.build.days.push({ name: next, title: "", items: [{ name: "", sets: "", reps: "", alt: "" }] });
+      S.build.open = S.build.days.length - 1;
+      break;
+    }
+    case "b-open-day":
+      S.build.open = S.build.open === +el.dataset.i ? -1 : +el.dataset.i;
+      break;
+    case "b-del-day":
+      if (!confirm("Remove this day?")) return;
+      S.build.days.splice(+el.dataset.i, 1);
+      S.build.open = -1;
+      break;
+    case "b-day-up":
+    case "b-day-dn": {
+      const di = +el.dataset.i;
+      const dj = di + (a === "b-day-up" ? -1 : 1);
+      if (dj < 0 || dj >= S.build.days.length) return;
+      const dt = S.build.days[di];
+      S.build.days[di] = S.build.days[dj];
+      S.build.days[dj] = dt;
+      S.build.open = dj;
+      break;
+    }
+    case "b-add-ex":
+      S.build.days[+el.dataset.i].items.push({ name: "", sets: "", reps: "", alt: "" });
+      break;
+    case "b-del-ex":
+      S.build.days[+el.dataset.d].items.splice(+el.dataset.i, 1);
+      break;
+    case "b-ex-up":
+    case "b-ex-dn": {
+      const xs = S.build.days[+el.dataset.d].items;
+      const xi = +el.dataset.i;
+      const xj = xi + (a === "b-ex-up" ? -1 : 1);
+      if (xj < 0 || xj >= xs.length) return;
+      const xt = xs[xi];
+      xs[xi] = xs[xj];
+      xs[xj] = xt;
+      break;
+    }
+    case "b-alt":
+      S.build.days[+el.dataset.d].items[+el.dataset.i].alt = el.dataset.v;
+      break;
+    case "b-save": {
+      const b = S.build;
+      if (!buildValid(b)) return;
+      const raw = buildText(b);
+      const dp = parseProgram(raw);
+      const np = { id: "p" + Date.now(), raw: raw, title: dp.title, start: b.start };
+      S.programs.push(np);
+      S.activeId = np.id;
+      cacheRaw = null;
+      S.editing = null;
+      S.dayIdx = 0;
+      S.tab = "train";
+      seedToday();
+      persist();
+      break;
+    }
+    case "new-prog":
+      S.editing = "new";
+      S.draft = { text: "", start: defaultStart() };
+      S.sheet = null;
+      break;
+    case "paste-cancel":
+      S.editing = null;
+      break;
+    case "paste-example":
+      S.draft.text = SEED;
+      render();
+      return;
+    case "paste-save": {
+      const dp = parseProgram(S.draft.text);
+      if (!dp.days.length || !dp.days.reduce((a, d) => a + d.count, 0)) return;
+      const multi = dp.days.length > 1 || !!dp.length;
+      const existingStart = S.editing !== "new" && (S.programs.find((x) => x.id === S.editing) || {}).start;
+      if (multi && !existingStart) {
+        /* ask, never assume: confirm week 1 before anything is saved */
+        S.draft.start = S.draft.start || (isNumberedDp(dp) ? todayISO() : defaultStart());
+        S.sheet = { type: "startask" };
+        break;
+      }
+      savePasted(dp);
+      break;
+    }
+    case "startask-go": {
+      const dp = parseProgram(S.draft.text);
+      S.sheet = null;
+      savePasted(dp);
+      break;
+    }
+    case "startask-cancel":
+      S.sheet = null;
+      break;
+    default:
+      return;
+  }
+  render();
+});
+
+/* text + date inputs */
+let previewTimer = null;
+document.addEventListener("input", (ev) => {
+  const el = ev.target;
+  const k = el.dataset.in;
+  if (!k) return;
+
+  if (k === "dw" || k === "dq") {
+    const e5 = (S.log.weeks[wkNow()] || {})[el.dataset.key];
+    const st4 = e5 && e5[el.dataset.i];
+    const d5 = st4 && st4.dr && st4.dr[+el.dataset.j];
+    if (d5) {
+      d5[k === "dw" ? "w" : "r"] = el.value;
+      persist();
+      clearTimeout(tickTimer);
+      const tKey = el.dataset.key;
+      const tI = +el.dataset.i;
+      tickTimer = setTimeout(function () {
+        autoTick(tKey, tI, null);
+      }, 700);
+    }
+    return;
+  }
+  if (k === "w" || k === "r") {
+    const o = {};
+    o[k] = el.value;
+    const wk = wkNow();
+    S.log.weeks[wk] = S.log.weeks[wk] || {};
+    S.log.weeks[wk][el.dataset.key] = S.log.weeks[wk][el.dataset.key] || {};
+    S.log.weeks[wk][el.dataset.key].n = el.dataset.name;
+    S.log.weeks[wk][el.dataset.key][+el.dataset.i] = Object.assign(
+      {},
+      S.log.weeks[wk][el.dataset.key][+el.dataset.i],
+      o
+    );
+    persist();
+    clearTimeout(tickTimer);
+    const tKey = el.dataset.key;
+    const tI = +el.dataset.i;
+    const tName = el.dataset.name;
+    tickTimer = setTimeout(function () {
+      autoTick(tKey, tI, tName);
+    }, 700);
+    return;
+  }
+  if (k === "fix-sets" || k === "fix-reps") {
+    S.pendingFix = S.pendingFix || {};
+    const key = nn(el.dataset.n);
+    S.pendingFix[key] = S.pendingFix[key] || {};
+    S.pendingFix[key][k === "fix-sets" ? "sets" : "reps"] = el.value.trim();
+    delete S.pendingFix[key].skip;
+    return;
+  }
+  if (k === "b-title") {
+    S.build.title = el.value;
+    return;
+  }
+  if (k === "b-weeks") {
+    S.build.weeks = parseInt(el.value, 10) || 0;
+    return;
+  }
+  if (k === "b-daytitle") {
+    S.build.days[+el.dataset.i].title = el.value;
+    return;
+  }
+  if (k === "b-exname" || k === "b-exsets" || k === "b-exreps") {
+    const x = S.build.days[+el.dataset.d].items[+el.dataset.i];
+    x[k === "b-exname" ? "name" : k === "b-exsets" ? "sets" : "reps"] = el.value;
+    return;
+  }
+  if (k === "bodyw") {
+    logBody(todayISO(), el.value);
+    return;
+  }
+  if (k === "accent") {
+    applyAccent(el.value);
+    return;
+  }
+  if (k === "pb-search") {
+    S.pbQuery = el.value;
+    render();
+    return;
+  }
+  if (k === "ax-name" || k === "ax-sets" || k === "ax-reps") {
+    S.sheet[k === "ax-name" ? "name" : k === "ax-sets" ? "sets" : "reps"] = el.value;
+    return;
+  }
+  if (k === "swap-name") {
+    S.sheet.name = el.value;
+    return;
+  }
+  if (k === "pb-name" || k === "pb-w" || k === "pb-r") {
+    S.sheet[k === "pb-name" ? "name" : k === "pb-w" ? "w" : "r"] = el.value;
+    if (k === "pb-name" && S.sheet.catAuto) {
+      const guess = guessCat(el.value, dayTitleIndex()[nn(el.value)]);
+      if (guess !== S.sheet.cat) {
+        S.sheet.cat = guess;
+        render();
+      }
+    }
+    return;
+  }
+  if (k === "restore-text") {
+    S.restoreText = el.value;
+    return;
+  }

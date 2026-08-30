@@ -1,0 +1,551 @@
+          (c === "all" ? "All" : CAT_NAME[c]) + "</button>"
+        );
+      }).join("") + "</div>"
+    : "";
+  const shown = singles.filter(function (p) { return catFilter === "all" || singleCat(p) === catFilter; });
+  return (
+    '<div class="wrap pad">' +
+    '<div class="eyebrow">Programs</div>' +
+    '<div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">' +
+    (progs.length
+      ? progs.map((p) => vProgramRow(p, { del: S.programs.length > 1 })).join("")
+      : '<p style="color:var(--faint);font-size:13px;margin:0">No multi-week programs yet.</p>') +
+    "</div>" +
+    '<div class="eyebrow" style="margin-top:24px">Grab-and-go workouts</div>' +
+    (singles.length
+      ? chipRow +
+        '<div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">' +
+        shown.map((p) => vProgramRow(p, { del: S.programs.length > 1 })).join("") +
+        "</div>"
+      : '<p style="color:var(--faint);font-size:13px;margin:12px 0 0">Paste a single-day session &mdash; ' +
+        '"Back Pump", "Leg Blast" &mdash; and it lands here, ready to grab on the day.</p>') +
+    '<div class="row" style="gap:12px;margin-top:16px">' +
+    '<button class="dash grow" data-act="new-prog">Paste text</button>' +
+    '<button class="dash grow" data-act="build-new">Build one</button></div>' +
+    (unclear.length
+      ? '<div class="mt3"><div class="eyebrow on">Needs a look</div>' +
+        '<div class="block mt"><p style="color:var(--mute);font-size:13px;line-height:1.6;margin:0">' +
+        unclear.length + (unclear.length === 1 ? " exercise in " : " exercises in ") +
+        esc(activeProgram().title) + " has no sets or reps that could be read from the text.</p>" +
+        '<button class="dash" style="margin-top:12px" data-act="review">Confirm them</button></div></div>'
+      : "") +
+    "</div>"
+  );
+}
+
+function vStyle() {
+  const st = settings();
+  const themeCards = Object.keys(THEMES)
+    .map((k) => {
+      const t = THEMES[k];
+      return (
+        '<button class="sw' + (st.theme === k || (!st.theme && k === "brass") ? " on" : "") +
+        '" data-act="theme" data-k="' + k + '"><b>' + esc(t.name) + "</b>" +
+        '<span class="dots"><i style="background:' + t.ink + '"></i>' +
+        '<i style="background:' + t.panel2 + '"></i>' +
+        '<i style="background:' + t.brass + '"></i>' +
+        '<i style="background:' + t.chalk + '"></i></span></button>'
+      );
+    })
+    .join("");
+
+  return (
+    '<div class="wrap pad">' +
+    '<div class="eyebrow">Appearance</div>' +
+    '<div class="swatches">' + themeCards + "</div>" +
+    '<div class="block mt2"><div class="eyebrow">Accent colour</div>' +
+    '<p style="color:var(--mute);font-size:13px;line-height:1.5;margin:8px 0 0">Overrides the highlight ' +
+    "colour of whichever theme you pick.</p>" +
+    '<div class="colorrow"><input type="color" value="' + esc(st.accent || getComputedStyle(document.documentElement).getPropertyValue("--brass").trim() || "#D3A03C") +
+    '" data-in="accent">' +
+    '<span class="grow" style="font-size:14px" id="accent-label">' +
+    (st.accent ? esc(st.accent) : "Theme default") + "</span>" +
+    '<button class="link" data-act="accent-reset" id="accent-reset"' +
+    (st.accent ? "" : ' style="visibility:hidden"') + ">Reset</button>" +
+    "</div></div>" +
+
+    "</div>"
+  );
+}
+
+function vSettingsPage() {
+  const st = settings();
+  return (
+    '<div class="wrap pad">' +
+    '<div><div class="eyebrow">Logging</div><div class="block mt"><div class="row">' +
+    '<span class="grow" style="font-size:15px">Tick a set once weight and reps are both filled</span>' +
+    '<button class="toggle' + (st.autoTick === false ? "" : " on") + '" data-act="autotick"><i></i></button>' +
+    "</div></div></div>" +
+
+    '<div class="mt3"><div class="eyebrow">Rest timer</div><div class="block mt">' +
+    '<div class="row"><span class="grow" style="font-size:15px">Start timer when a set is ticked</span>' +
+    '<button class="toggle' + (st.autoRest ? " on" : "") + '" data-act="autorest"><i></i></button></div>' +
+    '<div class="segs">' +
+    [60, 90, 120, 180]
+      .map(
+        (x) =>
+          '<button class="seg tnum' + (st.restSec === x ? " on" : "") +
+          '" data-act="restsec" data-s="' + x + '">' + x + "s</button>"
+      )
+      .join("") +
+    "</div></div></div>" +
+
+    '<div class="mt3"><div class="eyebrow">Units</div><div class="block mt">' +
+    '<div class="segs" style="margin-top:0">' +
+    ["kg", "lb"]
+      .map(
+        (u) =>
+          '<button class="seg' + (unit() === u ? " on" : "") + '" data-act="unit" data-u="' + u +
+          '">' + u + "</button>"
+      )
+      .join("") +
+    "</div>" +
+    '<p style="color:var(--faint);font-size:12px;margin:12px 0 0">Switching offers to convert everything ' +
+    "you have already logged, including body weight and plate sizes.</p></div></div>" +
+
+    '<div class="mt3"><div class="eyebrow">Coaching</div><div class="block mt"><div class="row">' +
+    '<span class="grow" style="font-size:15px">Suggest the next jump on each lift</span>' +
+    '<button class="toggle' + (st.nudge === false ? "" : " on") + '" data-act="nudge"><i></i></button>' +
+    "</div></div></div>" +
+
+    '<div class="mt3"><div class="eyebrow">Your data</div><div class="block mt">' +
+    '<p class="warn"><b>Read this once.</b> Safari and the home-screen icon keep <i>separate</i> storage, ' +
+    "so a log built up in one does not appear in the other. Deleting the home-screen icon deletes its data " +
+    "with it, and clearing Safari website data erases Safari's copy. Neither can be undone. Keep a backup " +
+    "and stick to one of the two.</p>" +
+    (daysSinceBackup() !== null
+      ? '<p class="tnum" style="color:var(--faint);font-size:12px;margin:10px 0 0">Last backup ' +
+        (daysSinceBackup() === 0 ? "today" : daysSinceBackup() + " days ago") + ".</p>"
+      : "") +
+    '<div class="row" style="gap:12px;margin-top:14px">' +
+    '<button class="btn-ghost" data-act="backup-copy">Copy backup</button>' +
+    '<button class="btn-primary" data-act="backup-file">Download backup</button></div>' +
+    '<button class="dash" style="margin-top:12px;height:44px" data-act="restore">Restore from a backup</button>' +
+    "</div></div>" +
+
+    '<div class="mt3"><div class="eyebrow">Offline</div><div class="block mt">' +
+    '<div class="row"><span class="grow" style="font-size:15px" id="offline-state">Checking&hellip;</span></div>' +
+    '<p style="color:var(--faint);font-size:12px;margin:10px 0 0">Once cached, the app opens with no signal. ' +
+    "New versions arrive on the launch after they are uploaded.</p>" +
+    '<button class="dash" style="margin-top:12px;height:44px" data-act="refresh-app">Load newest version now</button>' +
+    "</div></div>" +
+
+    '<div class="mt3"><div class="eyebrow">Sharing</div><div class="block mt">' +
+    '<p style="color:var(--mute);font-size:13px;line-height:1.6;margin:0">Anyone you send the link to gets ' +
+    "their own private copy. To hand over a workout, tap the copy icon on a program in the Programs tab " +
+    "and send them the text to paste in.</p></div></div>" +
+    "</div>"
+  );
+}
+
+function sessionHistory(cap) {
+  const rows = [];
+  Object.keys(S.log.sessions || {}).forEach(function (wk) {
+    Object.keys(S.log.sessions[wk]).forEach(function (k) {
+      const rec = S.log.sessions[wk][k];
+      if (!rec || !rec.at) return;
+      const m = k.match(/^(.+):(d\d+)$/);
+      const pid = m ? m[1] : "";
+      const p = S.programs.find(function (x) { return x.id === pid; });
+      let pn = rec.pn, dn = rec.dn, gg = rec.gg;
+      if (pn == null) {
+        /* older records carry no names; resolve what still exists */
+        pn = p ? p.title : "(deleted program)";
+        gg = p && isSingle(p) ? 1 : 0;
+        if (p && !gg && m) {
+          const dp2 = parseProgram(p.raw);
+          const di = +m[2].slice(1);
+          const dday = dp2.days[di];
+          dn = dday ? dday.title || dday.name : "";
+        } else dn = "";
+      } else if (!p && !pn) pn = "(deleted program)";
+      let dISO = rec.d;
+      if (!dISO) {
+        /* older records: pin weekday-named program days to their true date */
+        let wd = -1;
+        if (!gg && p && m) {
+          const dpd = parseProgram(p.raw).days[+m[2].slice(1)];
+          if (dpd) wd = WDAYS.indexOf(String(dpd.name || "").toLowerCase());
+        }
+        if (wd >= 0) {
+          const md = new Date(wk + "T00:00:00");
+          md.setDate(md.getDate() + wd);
+          dISO = ymd(md);
+        } else dISO = ymd(new Date(rec.at));
+      }
+      rows.push({ at: rec.at, d: dISO, sets: rec.sets, volume: rec.volume, pn: pn, dn: dn, gg: gg, wk: wk, k: k });
+    });
+  });
+  rows.sort(function (a, b) { return a.d === b.d ? (a.at < b.at ? 1 : -1) : a.d < b.d ? 1 : -1; });
+  return rows.slice(0, cap || 30);
+}
+
+function vProfile() {
+  const page = S.page;
+  if (page === "style") return vStyle();
+  if (page === "settings") return vSettingsPage();
+  if (page === "pbs") return vPBs();
+  if (page === "measures") return vMeasures();
+  if (page === "calendar") return vCalendar();
+  const all = sessionHistory(100000);
+  const wk = wkNow();
+  const thisWk = Object.keys((S.log.sessions || {})[wk] || {}).length;
+  const tile = function (p2, label, icon) {
+    return (
+      '<button class="tile" data-act="page" data-p="' + p2 + '">' + ICON[icon] +
+      "<span>" + label + "</span></button>"
+    );
+  };
+  return (
+    '<div class="wrap pad">' +
+    '<div class="block"><div class="row">' +
+    '<div class="grow"><div class="bigno tnum">' + all.length + "</div>" +
+    '<div class="eyebrow" style="margin-top:4px">' + (all.length === 1 ? "session" : "sessions") + " logged</div></div>" +
+    '<div style="text-align:right"><div class="bigno tnum">' + thisWk + "</div>" +
+    '<div class="eyebrow" style="margin-top:4px">this week</div></div>' +
+    "</div></div>" +
+    '<button class="bkline" data-act="page" data-p="settings">' +
+    (daysSinceBackup() === null
+      ? "No backup yet &mdash; your log lives only on this phone"
+      : daysSinceBackup() === 0
+        ? "Backed up today"
+        : "Last backup " + daysSinceBackup() + (daysSinceBackup() === 1 ? " day" : " days") + " ago") +
+    "<span>&rsaquo;</span></button>" +
+    '<div class="eyebrow" style="margin-top:24px">Dashboard</div>' +
+    '<div class="tiles">' +
+    tile("pbs", "PBs", "medal") +
+    tile("measures", "Measures", "trend") +
+    tile("style", "Style", "sliders") +
+    tile("settings", "Settings", "gear") +
+    "</div>" +
+    '<button class="tile wide" data-act="page" data-p="calendar">' + ICON.cal + "<span>Calendar</span></button>" +
+    "</div>"
+  );
+}
+
+const WDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+
+/* The date a session belongs to: the training day, never the moment the log
+   button happened to be pressed. Weekday-named program days pin to their day
+   in the logged week; anything else (grab-and-go, "Day 3") gets today. */
+function sessionDayISO(wk, day, gg) {
+  if (gg) return todayISO();
+  const nm = String(day.name || "");
+  const m = new Date(wk + "T00:00:00");
+  const wd = WDAYS.indexOf(nm.toLowerCase());
+  if (wd >= 0) {
+    m.setDate(m.getDate() + wd);
+    return ymd(m);
+  }
+  const dn = nm.match(/^day\s*(\d+)/i);
+  if (dn) {
+    /* the week bucket is the period anchor, so Day N is anchor + N-1 */
+    m.setDate(m.getDate() + Math.min(+dn[1] - 1, 6));
+    return ymd(m);
+  }
+  return todayISO();
+}
+
+function calSessions() {
+  const map = {};
+  sessionHistory(100000).forEach(function (r) {
+    (map[r.d] = map[r.d] || []).push(r);
+  });
+  return map;
+}
+
+function vCalendar() {
+  const now = new Date();
+  const cm = S.calM || now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+  const y = +cm.slice(0, 4), m = +cm.slice(5, 7) - 1;
+  const first = new Date(y, m, 1);
+  const days = new Date(y, m + 1, 0).getDate();
+  const lead = (first.getDay() + 6) % 7; /* Monday first */
+  const map = calSessions();
+  const selD = S.calD || ymd(now);
+  let cells = "";
+  for (let i = 0; i < lead; i++) cells += '<span class="cald off"></span>';
+  for (let d2 = 1; d2 <= days; d2++) {
+    const iso = cm + "-" + String(d2).padStart(2, "0");
+    const has = !!map[iso];
+    cells +=
+      '<button class="cald' + (has ? " has" : "") + (iso === selD ? " sel" : "") +
+      '" data-act="cal-day" data-d="' + iso + '"><b class="tnum">' + d2 + "</b>" +
+      (has ? "<i></i>" : "") + "</button>";
+  }
+  const sel = map[selD] || [];
+  const sd = new Date(selD + "T00:00:00");
+  const detail =
+    '<div class="block mt2"><div class="eyebrow">' +
+    esc(sd.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })) + "</div>" +
+    (sel.length
+      ? sel.map(function (r) {
+          const title = r.gg ? r.pn : r.dn || r.pn;
+          const sub = r.gg ? "Grab-and-go" : r.pn;
+          return (
+            '<button class="hrow" style="width:100%;text-align:left" data-act="sess-open" data-wk="' + esc(r.wk) + '" data-k="' + esc(r.k) + '">' +
+            '<div class="grow"><div class="hname">' + esc(title) + "</div>" +
+            '<div class="hsub">' + esc(sub) + "</div></div>" +
+            '<div class="hstats tnum">' + (r.sets || 0) + " sets" +
+            (r.volume ? "<br><span>" + Math.round(r.volume).toLocaleString() + " " + U() + "</span>" : "") +
+            '</div><span style="color:var(--brass);margin-left:10px">&rsaquo;</span></button>'
+          );
+        }).join("")
+      : '<p style="color:var(--faint);font-size:13px;margin:10px 0 0">Rest day &mdash; nothing logged.</p>') +
+    "</div>";
+  return (
+    '<div class="wrap pad">' +
+    '<div class="row" style="justify-content:space-between;align-items:center">' +
+    '<button class="iconbtn" data-act="cal-prev" style="margin-left:-8px">&lsaquo;</button>' +
+    '<div class="eyebrow on">' + esc(first.toLocaleDateString(undefined, { month: "long", year: "numeric" })) + "</div>" +
+    '<div class="row" style="gap:4px"><button class="link" data-act="cal-today" style="font-size:13px">Today</button>' +
+    '<button class="iconbtn" data-act="cal-next">&rsaquo;</button></div></div>' +
+    '<div class="calhead">' + ["M","T","W","T","F","S","S"].map(function (x) { return "<span>" + x + "</span>"; }).join("") + "</div>" +
+    '<div class="cal">' + cells + "</div>" +
+    detail +
+    "</div>"
+  );
+}
+
+function vPBs() {
+  return (
+    '<div class="wrap pad">' +
+    '<div class="eyebrow">Personal bests</div>' +
+    bestsList() +
+    '<button class="dash mt" data-act="pb-new">+ Add a personal best</button>' +
+    '<p style="color:var(--faint);font-size:12px;line-height:1.6;margin-top:14px">Built from every ticked ' +
+    "set, so restoring a backup fills this in. Edit a row to correct a name or to record something you did " +
+    "before you started tracking.</p>" +
+    "</div>"
+  );
+}
+
+function vMeasures() {
+  const ton = weeklyTonnage(8);
+  const body = bodySeries(20);
+  const last = body.length ? body[body.length - 1].v : "";
+  const fmtT = (v) => Math.round(v).toLocaleString() + " " + U();
+  return (
+    '<div class="wrap pad">' +
+    '<div class="eyebrow">Body weight</div>' +
+    '<div class="block mt"><div class="row">' +
+    '<div class="grow"><div class="bigno tnum">' + (last || "&mdash;") +
+    '</div><div class="eyebrow" style="margin-top:4px">' + U() + " today</div></div>" +
+    '<label class="fld" style="max-width:120px"><input class="tnum" inputmode="decimal" placeholder="' +
+    (last || "0") + '" value="' + esc(S.log.body && S.log.body[todayISO()] != null ? S.log.body[todayISO()] : "") +
+    '" data-in="bodyw"><em>' + U() + "</em></label></div>" +
+    '<div class="chart">' + lineChart(body) + "</div>" +
+    '<p style="color:var(--faint);font-size:12px;margin:10px 0 0">Logged against today\'s date. ' +
+    "Type over it to correct today's entry.</p></div>" +
+
+    '<div class="mt3"><div class="eyebrow">Weekly tonnage</div>' + vTonnage(ton) + "</div>" +
+    "</div>"
+  );
+}
+
+function vTonnage(ton) {
+  if (!ton.length)
+    return '<div class="block mt"><p style="color:var(--faint);font-size:13px;margin:0">Nothing logged yet. ' +
+      "Tonnage is weight times reps, added up across every ticked set.</p></div>";
+  const sel = ton.some(function (t) { return t.week === S.tonSel; })
+    ? S.tonSel
+    : ton[ton.length - 1].week;
+  const max = Math.max.apply(null, ton.map(function (t) { return t.v; })) || 1;
+  const bars = ton.map(function (t) {
+    const d = new Date(t.week + "T00:00:00");
+    const lab = d.getDate() + "/" + (d.getMonth() + 1);
+    return (
+      '<div class="tbar' + (t.week === sel ? " on" : "") + '" role="button" data-act="ton-week" data-w="' + t.week + '">' +
+      '<span class="tval tnum">' + (t.v >= 10000 ? Math.round(t.v / 1000) + "k" : t.v.toLocaleString()) + "</span>" +
+      '<span class="tcol"><i style="height:' + Math.max(6, Math.round((t.v / max) * 100)) + '%"></i></span>' +
+      '<span class="tbarlab tnum">' + lab + "</span></div>"
+    );
+  }).join("");
+  const cur = ton.find(function (t) { return t.week === sel; });
+  const sess = S.log.sessions[sel] || {};
+  const sk = Object.keys(sess);
+  let best = null;
+  sk.forEach(function (k) {
+    const r = sess[k];
+    if (r && r.volume && (!best || r.volume > best.volume)) best = r;
+  });
+  const d0 = new Date(sel + "T00:00:00");
+  const bestName = best ? (best.gg ? best.pn : best.dn || best.pn) : "";
+  return (
+    '<div class="tonrow">' + bars + "</div>" +
+    '<div class="block mt">' +
+    '<div class="eyebrow">w/c Mon ' + esc(d0.toLocaleDateString(undefined, { day: "numeric", month: "short" })) + "</div>" +
+    '<div class="tonbig tnum">' + cur.v.toLocaleString() + " " + U() + "</div>" +
+    '<div style="color:var(--mute);font-size:13px;margin-top:4px">' +
+    (sk.length
+      ? sk.length + (sk.length === 1 ? " session logged" : " sessions logged") +
+        (best && bestName ? " \u00b7 biggest: " + esc(bestName) + ", " + Math.round(best.volume).toLocaleString() + " " + U() : "")
+      : "No sessions logged this week \u2014 tonnage still counts every ticked set.") +
+    "</div>" +
+    '<p style="color:var(--faint);font-size:12px;margin:10px 0 0">Weight times reps across every ticked set. ' +
+    "Tap a bar to inspect a week.</p></div>"
+  );
+}
+
+
+function bestsList() {
+  const best = effectiveBests();
+  const idx = dayTitleIndex();
+  const keys = Object.keys(best);
+  if (!keys.length)
+    return '<div class="block mt"><p style="color:var(--faint);font-size:13px;margin:0">Log some weights, ' +
+      "or add a best you already hold, and it shows up here.</p></div>";
+
+  keys.forEach(function (k) {
+    best[k].cat = catOf(k, best[k].name, idx);
+  });
+  const q = (S.pbQuery || "").trim().toLowerCase();
+  const open = S.pbOpen || (S.pbOpen = {});
+
+  const row = function (k) {
+    const b = best[k];
+    const rm = oneRM(b.w, b.r);
+    const r3 = threeRM(b.w, b.r);
+    return (
+      '<button class="pbrow" style="width:100%;text-align:left" data-act="pb-edit" data-k="' + k + '">' +
+      '<div class="grow"><div style="font-size:15px;font-weight:600">' + esc(b.name) + "</div>" +
+      '<div class="tnum" style="color:var(--faint);font-size:12px">' +
+      (b.src === "manual" ? "Entered by hand" : esc(weekTag(b.week))) +
+      (r3 || rm ? " · est." : "") +
+      (r3 ? " 3RM " + r3 + " " + U() : "") +
+      (rm ? " · 1RM " + rm + " " + U() : "") + "</div></div>" +
+      '<div class="count tnum" style="color:var(--brass)">' + b.w + " " + U() +
+      (b.r ? " \u00d7 " + b.r : "") + "</div>" +
+      '<span style="color:var(--faint);font-size:15px;margin-left:8px">&#9998;</span></button>'
+    );
+  };
+
+  const search =
+    '<label class="fld" style="margin-top:12px"><input placeholder="Search a lift" value="' +
+    esc(S.pbQuery || "") + '" data-in="pb-search">' +
+    (q ? '<button data-act="pb-search-clear" style="color:var(--faint);font-size:16px">&times;</button>' : "") +
+    "</label>";
+
+  /* searching cuts straight through the groups */
+  if (q) {
+    const hits = keys
+      .filter(function (k) {
+        return best[k].name.toLowerCase().indexOf(q) >= 0;
+      })
+      .sort(function (a, b) {
+        return best[b].w - best[a].w;
+      });
+    return (
+      search +
+      (hits.length
+        ? '<div class="tnum" style="color:var(--faint);font-size:12px;margin-top:12px">' + hits.length +
+          (hits.length === 1 ? " match" : " matches") + "</div>" +
+          '<div class="pblist" style="margin-top:8px">' + hits.map(row).join("") + "</div>"
+        : '<div class="block mt"><p style="color:var(--faint);font-size:13px;margin:0">Nothing matches "' +
+          esc(S.pbQuery) + '".</p></div>')
+    );
+  }
+
+  /* otherwise every group starts shut */
+  const groups = CATS.map(function (c) {
+    const inCat = keys
+      .filter(function (k) {
+        return best[k].cat === c[0];
+      })
+      .sort(function (a, b) {
+        return best[b].w - best[a].w;
+      });
+    if (!inCat.length) return "";
+    const isOpen = !!open[c[0]];
+    const top = best[inCat[0]];
+    return (
+      '<div class="catgrp' + (isOpen ? " on" : "") + '">' +
+      '<button class="cathead" data-act="pb-toggle" data-c="' + c[0] + '">' +
+      '<span class="grow">' + c[1] + "</span>" +
+      '<span class="sub tnum">' + inCat.length +
+      (isOpen ? "" : " · top " + top.w + " " + U()) + "</span>" +
+      '<span class="caret' + (isOpen ? " on" : "") + '">&#8250;</span></button>' +
+      (isOpen ? '<div class="pblist" style="padding:0 4px 4px">' + inCat.map(row).join("") + "</div>" : "") +
+      "</div>"
+    );
+  }).join("");
+
+  return search + '<div class="cats">' + groups + "</div>";
+}
+
+function vPBSheet() {
+  const p = S.sheet;
+  return sheetShell(
+    p.isNew ? "New entry" : "Personal best",
+    p.isNew ? "Add a best" : esc(p.name || "Edit"),
+    '<label class="fld"><input placeholder="Exercise name" value="' + esc(p.name) +
+      '" data-in="pb-name"></label>' +
+      '<div class="row" style="gap:8px;margin-top:10px">' +
+      '<label class="fld grow"><input class="tnum" inputmode="decimal" placeholder="180" value="' +
+      esc(p.w) + '" data-in="pb-w"><em>' + U() + "</em></label>" +
+      '<label class="fld grow"><input class="tnum" inputmode="numeric" placeholder="6" value="' +
+      esc(p.r) + '" data-in="pb-r"><em>reps</em></label></div>' +
+      '<div class="mt2"><div class="eyebrow">Category</div><div class="chips" style="margin-top:8px">' +
+      CATS.map(function (c) {
+        return (
+          '<button class="pchip' + (p.cat === c[0] ? " on" : "") + '" data-act="pb-setcat" data-c="' +
+          c[0] + '">' + c[1] + "</button>"
+        );
+      }).join("") + "</div></div>" +
+      (p.src === "logged"
+        ? '<p class="warn" style="margin-top:14px">This came from a logged set. Saving a different figure ' +
+          "keeps your log untouched and shows your entry instead.</p>"
+        : "") +
+      '<div class="row" style="gap:12px;margin-top:20px">' +
+      (p.isNew
+        ? ""
+        : '<button class="btn-ghost" data-act="pb-remove">Remove</button>') +
+      '<button class="btn-primary" data-act="pb-save">Save</button></div>'
+  );
+}
+
+/* Away from Train, the program and week are noise. Keep a slim bar so content
+   still clears the status bar and the Dynamic Island. */
+function vTabHead(title) {
+  return (
+    '<div class="hdr slim"><div class="wrap"><div class="eyebrow on">' + esc(title) + "</div></div></div>"
+  );
+}
+
+function vSubHead(title) {
+  return (
+    '<div class="hdr slim"><div class="wrap" style="display:flex;align-items:center;gap:10px">' +
+    '<button class="iconbtn" data-act="page" data-p="" style="margin-left:-8px">&lsaquo;</button>' +
+    '<div class="eyebrow on">' + esc(title) + "</div></div></div>"
+  );
+}
+
+const DOCK_TABS = [
+  ["library", "Programs", "layers"],
+  ["train", "Train", "dumbbell"],
+  ["profile", "Profile", "user"],
+];
+
+/* The dock lives outside #app and is never rebuilt, so the lens can glide. */
+function dockInit() {
+  if (document.getElementById("dock")) return;
+  const d = document.createElement("nav");
+  d.id = "dock";
+  d.className = "dock hide";
+  d.innerHTML =
+    '<div class="lens"></div>' +
+    DOCK_TABS.map(function (x) {
+      return (
+        '<button data-act="tab" data-t="' + x[0] + '"><i>' + ICON[x[2]] +
+        "<span>" + x[1] + "</span></i></button>"
+      );
+    }).join("");
+  document.body.appendChild(d);
+  dockTouch(d);
+}
+
+function dockSync(show) {
+  const d = document.getElementById("dock");
+  if (!d) return;
+  d.classList.toggle("hide", !show);
+  if (!show) return;

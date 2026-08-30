@@ -1,0 +1,654 @@
+  font-family:var(--display);font-size:17px;letter-spacing:.06em;text-transform:uppercase;
+  display:flex;align-items:center;justify-content:center}
+.btn-primary[disabled]{background:var(--panel2);color:var(--faint)}
+.btn-ghost{height:50px;padding:0 16px;border:1px solid var(--line);border-radius:12px;color:var(--mute);
+  font-size:14px;display:flex;align-items:center;justify-content:center}
+.swatches{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.sw{border:1px solid var(--line);border-radius:14px;padding:12px;background:var(--panel)}
+.sw.on{border-color:var(--brass)}
+.sw b{font-family:var(--display);font-size:15px;font-weight:400;text-transform:uppercase;display:block}
+.sw .dots{display:flex;gap:5px;margin-top:8px}
+.sw .dots i{width:16px;height:16px;border-radius:999px;display:block;border:1px solid rgba(255,255,255,.12)}
+.rev{background:var(--ink);border:1px solid var(--line);border-radius:14px;padding:12px;margin-top:10px}
+.rev .nm{font-size:15px;font-weight:600}
+.rev .where{color:var(--faint);font-size:12px;margin-top:2px}
+.rev .flds{display:flex;gap:8px;align-items:center;margin-top:10px}
+.rev .flds .fld{flex:1}
+.bex{background:var(--ink);border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:10px}
+select.datefld{-webkit-appearance:none;appearance:none;height:36px;padding:0 8px;max-width:none}
+.nag{display:flex;align-items:center;gap:10px;margin:12px 20px 0;padding:10px 12px;border-radius:12px;
+  background:var(--panel2);border:1px solid var(--brassDim);font-size:13px;color:var(--chalk)}
+.nag button{color:var(--brass);font-size:13px;white-space:nowrap}
+.nag button.x{color:var(--faint);font-size:18px}
+.chart{background:var(--ink);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px}
+.bigno{font-family:var(--display);font-size:34px;line-height:1;color:var(--brass)}
+.pblist{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.cats{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.catgrp{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.catgrp.on{border-color:var(--brassDim)}
+.cathead{display:flex;align-items:center;gap:10px;width:100%;padding:15px 16px;text-align:left;
+  font-family:var(--display);font-size:17px;text-transform:uppercase;letter-spacing:.06em;color:var(--chalk)}
+.catgrp.on .cathead{color:var(--brass)}
+.cathead .grow{flex:1;min-width:0}
+.cathead .sub{color:var(--faint);font-size:12px;white-space:nowrap}
+.catgrp .pblist{margin:0;padding:0 10px 10px}
+.caret{color:var(--faint);font-size:20px;line-height:1;display:inline-block;transition:transform .15s ease}
+.caret.on{transform:rotate(90deg);color:var(--brass)}
+.pbgrp.open{border-color:var(--brassDim)}
+.pbgrp b{font-family:var(--display);font-size:16px;font-weight:400;text-transform:uppercase;
+  letter-spacing:.08em;flex:1}
+.pbgrp.open b{color:var(--brass)}
+.pbgrp .n{font-size:13px;color:var(--faint)}
+.pbgrp .cv{color:var(--faint);font-size:13px;width:14px;text-align:center}
+.pbrow{display:flex;align-items:center;gap:12px;background:var(--ink);border-radius:12px;padding:10px 12px}
+.copylast{width:100%;height:44px;border:1px dashed var(--line);border-radius:12px;color:var(--brass);
+  font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:4px}
+.nudge{color:var(--brass);font-size:12px;margin-top:3px}
+.badge.pb{background:var(--brass);border-color:var(--brass);color:var(--onAccent);font-weight:600}
+.ro{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);
+  border-radius:12px;padding:10px 12px}
+.ro .lbl2{flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ro .lbl2.s{font-family:var(--display);text-transform:uppercase;letter-spacing:.12em;font-size:12px;color:var(--brass)}
+.ro .lbl2.n{color:var(--mute);font-size:13px}
+.ro .mv{width:34px;height:34px;border:1px solid var(--line);border-radius:8px;display:flex;
+  align-items:center;justify-content:center;color:var(--mute);font-size:15px;flex-shrink:0}
+.best{color:var(--mute);font-size:12px;margin-top:6px}
+.best b{color:var(--brass);font-weight:400}
+.warn{border-left:2px solid var(--brass);padding-left:10px;color:var(--mute);font-size:13px;line-height:1.5}
+.colorrow{display:flex;align-items:center;gap:12px;margin-top:12px}
+input[type=color]{width:46px;height:34px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);padding:2px}
+.link{color:var(--brass);font-size:14px;text-decoration:underline}
+.center{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;
+  text-align:center;padding:0 32px;gap:16px}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="center">
+    <div class="eyebrow on">Iron Log</div>
+    <p style="color:var(--mute);font-size:14px;line-height:1.6">This page needs JavaScript to run, and it
+      looks like it did not start. That usually means the file was opened in a preview window rather than in
+      Safari itself.</p>
+    <p style="color:var(--faint);font-size:13px;line-height:1.6">In Files, tap the share icon and choose
+      <b style="color:var(--mute)">Open in Safari</b>. If it was sent in a chat or mail app, save it first,
+      then open it from Files.</p>
+  </div>
+</div>
+<noscript>
+  <div class="center"><div class="eyebrow on">JavaScript is switched off</div>
+  <p style="color:var(--mute);font-size:14px">Turn it on in Settings &rsaquo; Apps &rsaquo; Safari &rsaquo;
+    Advanced, then reload this page.</p></div>
+</noscript>
+<script>
+function ironFail(where, msg, line, col, stack) {
+  try {
+    const detail =
+      String(msg || "unknown") +
+      (line ? " (line " + line + ":" + col + ")" : "") +
+      (stack ? "\n" + String(stack).split("\n").slice(0, 4).join("\n") : "");
+    let stored = "unknown";
+    try {
+      const raw = localStorage.getItem("ironlog.v1");
+      stored = raw ? Math.round(raw.length / 1024) + " KB" : "empty";
+    } catch (e) {
+      stored = "blocked";
+    }
+    document.getElementById("app").innerHTML =
+      '<div class="center"><div class="eyebrow on">Something broke</div>' +
+      '<p style="color:var(--mute);font-size:14px;line-height:1.6">Your logged sets are still on this ' +
+      "device &mdash; this is a display fault, not lost data. Send the text below to Claude.</p>" +
+      '<p style="color:var(--brass);font-size:12px;font-family:monospace;word-break:break-all;' +
+      'white-space:pre-wrap;text-align:left">' +
+      where + ": " + detail.replace(/[<>]/g, "") + "\nstored: " + stored +
+      "\nua: " + String(navigator.userAgent).slice(0, 90) + "</p>" +
+      '<a href="rescue.html" style="color:var(--brass);font-size:14px">Open the rescue page</a></div>';
+  } catch (e) {}
+}
+
+/* In-app browsers (a link opened inside Messages, WhatsApp and the like) inject
+   their own scripts into every page. When one of those throws, the page only sees
+   a masked, detail-free "Script error." at line 0. It is never this app's code and
+   never actionable, so it must not take the interface down. Likewise, once the app
+   has rendered, a later fault should warn without destroying a workout in progress. */
+let appAlive = false;
+
+function ironWarn(text) {
+  try {
+    const app = document.getElementById("app");
+    if (!app) return;
+    let bar = document.getElementById("errbar");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "errbar";
+      bar.className = "nag";
+      app.insertBefore(bar, app.firstChild);
+    }
+    bar.textContent = "Something misfired: " + String(text).slice(0, 120) +
+      " — your logged sets are safe. Tell Claude.";
+  } catch (e) {}
+}
+
+window.onerror = function (msg, src, line, col, err) {
+  const masked = /^Script error\.?$/.test(String(msg || "")) && !line;
+  if (masked) return true; /* an injected script from the surrounding browser, not ours */
+  if (appAlive) {
+    ironWarn(msg);
+    return true;
+  }
+  ironFail("error", msg, line, col, err && err.stack);
+  return true;
+};
+window.addEventListener("unhandledrejection", function (ev) {
+  const r = ev.reason;
+  const m = r && r.message ? r.message : r;
+  if (appAlive) {
+    ironWarn(m);
+    return;
+  }
+  ironFail("promise", m, 0, 0, r && r.stack);
+});
+
+/* ===== parser and maths (identical to the Claude artifact build) ===== */
+const DAY_NAMES = [
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+];
+const DAY_RE = new RegExp(
+  `^(${DAY_NAMES.join("|")}|day\\s*\\d+)\\b\\s*[–—:\\-]?\\s*(.*)$`,
+  "i"
+);
+const SETS_RE = /^\d{1,2}$/;
+const REPS_RE =
+  /^(\d{1,3}(\s*[–—\-/]\s*\d{1,3})?)\s*\+?\s*(reps?|steps?|secs?|seconds?|mins?|minutes?|each\s*side|per\s*side|\/\s*side|m|km|rounds?)?$/i;
+const OPEN_RE = /^(amrap|failure|to failure|max|max reps)$/i;
+const INFO_RE =
+  /(principle|progression|nutrition|meal|diet|note|why|overview|summary|guideline|deload|supplement|recovery|intro|about|structure|cardio|rules?\b|tips?\b|execution|progress\b|recommendation)/i;
+const SECTION_RE =
+  /^(giant\s*set|super\s*-?set|tri\s*-?set|circuit|drop\s*set|finish|warm\s*-?up|cool\s*-?down|part\s*\d)/i;
+
+const isReps = (l) => REPS_RE.test(l) || OPEN_RE.test(l);
+const stripColon = (l) => l.replace(/\s*:\s*$/, "");
+const words = (l) => l.split(/\s+/).filter(Boolean).length;
+
+const tidy = (s) => s.trim().replace(/[\s:–—-]+$/, "");
+
+/* "(drop set)" on an exercise line — the set itself, not the notes. Returns the
+   cleaned line and how many drops to seed when the pill is tapped. */
+function dropMark(raw) {
+  const re = /\s*[\(\[]?\s*(?:\+\s*|w\/\s*|with\s+)?(double|triple)?[\s-]*drop[\s-]?sets?(?:\s+on\s+last(?:\s+set)?)?\s*[\)\]]?/i;
+  const m = raw.match(re);
+  if (!m || /^\s*drop/i.test(raw)) return { line: raw, n: 0 }; /* leave section headers alone */
+  const n = m[1] ? (/^double$/i.test(m[1]) ? 2 : 3) : 1;
+  return { line: (raw.slice(0, m.index) + " " + raw.slice(m.index + m[0].length)).replace(/\s{2,}/g, " ").trim(), n: n };
+}
+
+function inlineExercise(raw) {
+  /* "Total: 20 sets" is a tally, not a lift */
+  if (/^totals?\s*[:\-\u2013\u2014]/i.test(raw)) return null;
+  const dm0 = dropMark(raw);
+  const dropN = dm0.n;
+  let line = dm0.line;
+  let qual = "";
+  /* peel trailing parentheticals: reps-context ones become quals, week rules
+     stay for the week parser, coaching cues ("2-sec squeeze") are dropped */
+  for (let g = 0; g < 3; g++) {
+    const qm = line.match(/\s*\(([^)]{1,32})\)\s*$/);
+    if (!qm) break;
+    if (/week|odd|even/i.test(qm[1])) break;
+    if (/each|per\b|side|arm|leg|total/i.test(qm[1])) qual = " " + qm[1].trim() + qual;
+    line = line.slice(0, qm.index);
+  }
+  const em = line.match(/\s+(each(?:\s+(?:side|leg|arm))?|per\s+(?:side|leg|arm))\s*$/i);
+  if (em) {
+    qual = " " + em[1].trim() + qual;
+    line = line.slice(0, em.index);
+  }
+
+  /* "Name - 5 sets x 8-10 reps" · "Name: 3 sets of 12" · "Name 4x8" · "Name - 4 sets to failure" */
+  let m = line.match(
+    /^(.{2,60}?)[\s:\u2013\u2014-]+(\d{1,2})(?:\s*[\u2013\u2014-]\s*(\d{1,2}))?\s*(?:sets?)?\s*(?:x|\u00d7|\*|of|to)\s*(failure|fail|amrap|max|\d{1,3}(?:\s*[\u2013\u2014-]\s*\d{1,3})?\s*(?:sec(?:ond)?s?|min(?:ute)?s?)?\s*\+?)\s*(?:reps?|steps?)?$/i
+  );
+  if (m) {
+    const sets = m[3] ? Math.max(+m[2], +m[3]) : +m[2];
+    let reps = m[4].trim();
+    if (/^(fail|failure)$/i.test(reps)) reps = "to failure";
+    return { name: tidy(m[1]), sets: sets, reps: reps + qual, drop: dropN };
+  }
+
+  /* "Curl - 3 sets" — count known, reps unspecified */
+  m = line.match(/^(.{2,60}?)[\s:\u2013\u2014-]+(\d{1,2})\s*sets?$/i);
+  if (m) return { name: tidy(m[1]), sets: +m[2], reps: qual.trim(), drop: dropN };
+
+  /* "4x8 Bench Press" */
+  m = line.match(
+    /^(\d{1,2})\s*(?:sets?)?\s*(?:x|\u00d7|of)\s*(\d{1,3}(?:\s*[\u2013\u2014-]\s*\d{1,3})?)\s+(.{2,60})$/i
+  );
+  if (m) return { name: tidy(m[3]), sets: +m[1], reps: m[2].trim() + qual, drop: dropN };
+
+  m = line.match(/^(.{2,70}?)\s*[x\u00d7]\s*(\d{1,2})\s*rounds?$/i);
+  if (m) return { name: tidy(m[1]), sets: +m[2], reps: "per round", drop: dropN };
+
+  m = line.match(
+    /^(.{2,70}?)\s*[x\u00d7]\s*(\d{1,3}(?:\s*[\u2013\u2014-]\s*\d{1,3})?)\s*(reps?|steps?|each\s*side|per\s*side)?$/i
+  );
+  if (m)
+    return { name: tidy(m[1]), sets: null, reps: (m[2] + " " + (m[3] || "")).trim() + qual, drop: dropN };
+
+  m = line.match(/^(.{2,60}?)\s*:\s*(\d{1,2})\s*[x\u00d7]\s*(.{1,24})$/i);
+  if (m) return { name: tidy(m[1]), sets: +m[2], reps: m[3].trim() + qual, drop: dropN };
+
+  return null;
+}
+
+function nextIsExercise(lines, k) {
+  const a = lines[k + 1];
+  if (!a) return false;
+  if (inlineExercise(a)) return true;
+  const b = lines[k + 2];
+  const c = lines[k + 3];
+  return !!(b && c && SETS_RE.test(b) && isReps(c));
+}
+
+/* pulls "(Weeks 1,3,5,7)" / "(odd weeks)" off the end of an exercise name */
+function extractWeeks(name) {
+  let m =
+    name.match(/\(\s*(?:only\s*)?weeks?\s*([\d\s,&\-–—]+)\)\s*$/i) ||
+    name.match(/[-–—:]\s*(?:only\s*)?weeks?\s*([\d\s,&\-–—]+)$/i);
+  if (m) {
+    const nums = [];
+    m[1].split(/[,&]|\band\b/i).forEach((part) => {
+      const rg = part.match(/(\d+)\s*[-–—]\s*(\d+)/);
+      if (rg) {
+        for (let i = +rg[1]; i <= +rg[2] && i - rg[1] < 60; i++) nums.push(i);
+      } else {
+        const d = part.match(/\d+/);
+        if (d) nums.push(+d[0]);
+      }
+    });
+    if (nums.length)
+      return {
+        name: name.replace(m[0], "").trim().replace(/[-–—:,\s]+$/, ""),
+        weeks: nums,
+      };
+  }
+  const p = name.match(/\(\s*(odd|even)\s*weeks?\s*\)\s*$/i);
+  if (p)
+    return {
+      name: name.replace(p[0], "").trim(),
+      parity: p[1].toLowerCase(),
+    };
+  return null;
+}
+
+function detectLength(text) {
+  let max = 0;
+  const re = /(\d{1,2})\s*[-–—]?\s*weeks?\b/gi;
+  let m;
+  while ((m = re.exec(text))) {
+    const n = +m[1];
+    if (n > max && n <= 52) max = n;
+  }
+  return max;
+}
+
+function parseProgram(text) {
+  const lines = text
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((l) =>
+      /* an indented sub-bullet is a coaching cue, not an exercise; the trailing
+         period routes it into the note branch after trimming */
+      (/^\s{2,}[-\u2022*\u00b7]\s/.test(l) && !/[.!?]\s*$/.test(l) ? l + "." : l)
+        .trim()
+        .replace(/^[-\u2022*\u00b7]\s*/, "")
+        .replace(/^[^\p{L}\p{N}(]+\s*/u, "") /* leading emoji / decorations */
+        .replace(/^\d{1,2}[.)]\s+(?=[A-Za-z])/, "")
+    )
+    .filter(
+      (l) =>
+        l &&
+        !/^[⸻—–\-*_=•·~]+$/.test(l) &&
+        !/^(exercise|exercises|sets|reps|set|rep)$/i.test(l)
+    );
+
+  const startsExercise = (k) => {
+    const l = lines[k];
+    if (!l) return false;
+    if (inlineExercise(l)) return true;
+    return !!(
+      lines[k + 1] && lines[k + 2] &&
+      SETS_RE.test(lines[k + 1]) && isReps(lines[k + 2]) &&
+      !SETS_RE.test(l) && !isReps(l)
+    );
+  };
+  const headingish = (l) => l && words(l) <= 12 && !/[.:?!]$/.test(l);
+
+  let title = "";
+  let start = 0;
+  const preamble = [];
+
+  const anyDayHeader = lines.some((l) => DAY_RE.test(l) && !inlineExercise(l));
+
+  if (!anyDayHeader) {
+    /* one session, no day line: everything before the first exercise is context,
+       and the heading closest to it is the title */
+    let first = -1;
+    for (let k = 0; k < lines.length; k++) {
+      if (startsExercise(k)) {
+        first = k;
+        break;
+      }
+    }
+    if (first > 0) {
+      let ti = -1;
+      for (let k = first - 1; k >= 0; k--) {
+        if (headingish(lines[k])) {
+          ti = k;
+          break;
+        }
+      }
+      if (ti >= 0) title = lines[ti];
+      for (let k = 0; k < first; k++) if (k !== ti) preamble.push(lines[k]);
+      start = first;
+    } else if (first === 0) {
+      start = 0;
+    }
+  } else {
+    for (let k = 0; k < Math.min(8, lines.length); k++) {
+      const l = lines[k];
+      if (DAY_RE.test(l)) break;
+      if (headingish(l)) {
+        title = l;
+        start = k + 1;
+        break;
+      }
+      preamble.push(l);
+    }
+  }
+
+  const hasDayHeader = anyDayHeader;
+
+  const days = [];
+  const info = [];
+  let day = null;
+  let sec = null;
+  let rounds = null;
+  let mode = "info";
+
+  if (preamble.length) {
+    sec = { heading: "Intro", lines: preamble.slice() };
+    info.push(sec);
+  }
+
+  const anyExercise = lines.some((l, k) => startsExercise(k));
+
+  if (!hasDayHeader && anyExercise) {
+    day = { id: "d0", name: "Day 1", title: "", items: [] };
+    days.push(day);
+    mode = "day";
+    sec = null;
+  }
+
+  for (let k = start; k < lines.length; k++) {
+    const line = lines[k];
+    const next = lines[k + 1];
+
+    const dm = line.match(DAY_RE);
+    if (dm && !inlineExercise(line)) {
+      const label = dm[1].replace(/\s+/g, " ");
+      const nm2 = label.charAt(0).toUpperCase() + label.slice(1).toLowerCase();
+      const ttl2 = (dm[2] || "").replace(/^[–—:\-\s]+/, "").trim();
+      const dupe = days.find(function (d2) {
+        return d2.name.toLowerCase() === nm2.toLowerCase() && !d2.items.some(function (x) { return x.kind === "ex"; });
+      });
+      if (dupe) {
+        /* overview line ("Monday: Lower ...") claimed the slot first; the block
+           with actual exercises is the real day */
+        if (ttl2) dupe.title = ttl2;
+        dupe.items = [];
+        day = dupe;
+      } else {
+        day = { id: "d" + days.length, name: nm2, title: ttl2, items: [] };
+        days.push(day);
+      }
+      mode = "day";
+      sec = null;
+      rounds = null;
+      continue;
+    }
+
+    const infoHead =
+      !/[.!?]$/.test(line) &&
+      words(line) <= 8 &&
+      INFO_RE.test(line) &&
+      !(next && SETS_RE.test(next)) &&
+      !nextIsExercise(lines, k);
+
+    if (infoHead) {
+      sec = { heading: stripColon(line), lines: [] };
+      info.push(sec);
+      mode = "info";
+      continue;
+    }
+
+    if (mode === "info") {
+      if (!sec) {
+        sec = { heading: "Notes", lines: [] };
+        info.push(sec);
+      }
+      sec.lines.push(line);
+      continue;
+    }
+
+    // ---- inside a day ----
+    /* a bare "Week 3" / "Weeks 1\u20132" line opens a progression schedule:
+       that reading material belongs in program info, not under the exercises */
+    if (mode === "day" && /^weeks?\s*\d+(\s*[\u2013\u2014-]\s*\d+)?$/i.test(line)) {
+      sec = { heading: "Progression \u2014 " + line, lines: [] };
+      info.push(sec);
+      mode = "info";
+      continue;
+    }
+
+    /* "Incline Barbell Press" / "4 \u00d7 6\u20138": prescription on its own line */
+    if (next && !inlineExercise(line) && /^\d{1,2}\s*[\u00d7xX*]\s*\S/.test(next)) {
+      const joined = inlineExercise(line + " \u2013 " + next);
+      if (joined) {
+        day.items.push({
+          kind: "ex",
+          name: joined.name,
+          sets: joined.sets,
+          reps: joined.reps,
+          drop: joined.drop,
+        });
+        k++;
+        continue;
+      }
+    }
+    if (
+      next &&
+      SETS_RE.test(next) &&
+      lines[k + 2] &&
+      isReps(lines[k + 2]) &&
+      !SETS_RE.test(line) &&
+      !isReps(line)
+    ) {
+      const dmc = dropMark(line);
+      day.items.push({
+        kind: "ex",
+        name: dmc.line,
+        sets: +next,
+        reps: lines[k + 2],
+        drop: dmc.n,
+      });
+      k += 2;
+      continue;
+    }
+
+    const inl = inlineExercise(line);
+    if (inl) {
+      day.items.push({
+        kind: "ex",
+        ...inl,
+        sets: inl.sets === null ? rounds : inl.sets,
+      });
+      continue;
+    }
+
+    if (
+      (/:$/.test(line) && words(line) <= 6) ||
+      SECTION_RE.test(line) ||
+      (words(line) <= 2 &&
+        !/\d/.test(line) &&
+        !/[.!?]$/.test(line) &&
+        nextIsExercise(lines, k))
+    ) {
+      const rm = line.match(/(\d{1,2})\s*rounds?/i);
+      rounds = rm ? +rm[1] : null;
+      day.items.push({ kind: "sec", label: stripColon(line) });
+      continue;
+    }
+
+    if (
+      /^(chest|back|shoulders?|arms?|legs?|quads?|hamstrings?|glutes?|calves?|biceps?|triceps?|core|abs|delts?)(\s*[+&\/]\s*(chest|back|shoulders?|arms?|legs?|quads?|hamstrings?|glutes?|calves?|biceps?|triceps?|core|abs|delts?))*$/i.test(line) &&
+      !inlineExercise(line)
+    ) {
+      day.items.push({ kind: "sec", label: line });
+      continue;
+    }
+
+    if (
+      /[.!?]$/.test(line) ||
+      words(line) > 8 ||
+      /^weeks?\s*\d/i.test(line) ||
+      /[=,]/.test(line) ||
+      /:$/.test(line) ||
+      /^total\b/i.test(line) ||
+      /^[A-Z]{2,4}$/.test(line) ||
+      /\bRIR\b|\bFRs?\b|\bpartials?\b|final sets?\b|\u2192|\sF\s*$|\sF\s*\+/.test(line)
+    ) {
+      day.items.push({ kind: "note", text: line });
+      continue;
+    }
+
+    day.items.push({ kind: "ex", name: line, sets: rounds, reps: "" });
+  }
+
+  let maxWeek = 0;
+  days.forEach((d, di) => {
+    let n = 0;
+    d.items.forEach((it) => {
+      if (it.kind !== "ex") return;
+      const rule = extractWeeks(it.name);
+      if (rule) {
+        it.name = rule.name || it.name;
+        if (rule.weeks) {
+          it.weeks = rule.weeks;
+          rule.weeks.forEach((w) => {
+            if (w > maxWeek) maxWeek = w;
+          });
+        }
+        if (rule.parity) it.parity = rule.parity;
+      }
+      it.key = "d" + di + "e" + n++;
+    });
+    d.count = n;
+  });
+
+  /* Week-count is header metadata. Only read it from text before the first
+     exercise, so trailing chatter ("Would you like a 6-week plan?") can't
+     turn a pasted single workout into a phantom program. */
+  let lenScope = text;
+  const firstEx = days.length && days[0].items.find(function (it) { return it.kind === "ex"; });
+  if (firstEx) {
+    const ix = text.indexOf(firstEx.name);
+    if (ix > 0) lenScope = text.slice(0, ix);
+  }
+  const length = Math.max(detectLength(lenScope), maxWeek);
+
+  return { title: title || "Untitled program", days, info, length };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Dates                                                             */
+/* ------------------------------------------------------------------ */
+
+function mondayOf(offset) {
+  const d = new Date();
+  d.setDate(d.getDate() + offset * 7);
+  const shift = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - shift);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+/* local calendar date. toISOString() would roll back a day east of UTC. */
+const ymd = (d) =>
+  d.getFullYear() +
+  "-" +
+  String(d.getMonth() + 1).padStart(2, "0") +
+  "-" +
+  String(d.getDate()).padStart(2, "0");
+/* Numbered-day programs (Day 1..N) anchor their weeks to the chosen start
+   date instead of calendar Mondays: D1 is the start day itself, wherever it
+   falls, and each "week" runs seven days from there. */
+const isNumberedDp = (dp) => !!(dp && dp.days.length && /^day\s*\d/i.test(dp.days[0].name));
+function progAnchorISO() {
+  const pr = typeof activeProgram === "function" ? activeProgram() : null;
+  if (!pr || !pr.start) return null;
+  const dp = parsedProgram();
+  return isNumberedDp(dp) ? pr.start : null;
+}
+function anchorOf(offset) {
+  const a = progAnchorISO();
+  if (!a) return mondayOf(offset);
+  const s = new Date(a + "T00:00:00");
+  const t = new Date();
+  t.setHours(0, 0, 0, 0);
+  const k0 = Math.floor((t - s) / 604800000);
+  s.setDate(s.getDate() + (k0 + offset) * 7);
+  return s;
+}
+function todayAnchorIdx() {
+  const a = progAnchorISO();
+  if (!a) return -1;
+  const s = new Date(a + "T00:00:00");
+  const t = new Date();
+  t.setHours(0, 0, 0, 0);
+  const diff = Math.round((t - s) / 86400000);
+  return diff < 0 ? -1 : diff % 7;
+}
+const wkKey = (offset) => ymd(anchorOf(offset));
+const shortDate = (d) =>
+  d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+function wkLabel(offset) {
+  const s = anchorOf(offset);
+  const e = new Date(s);
+  e.setDate(e.getDate() + 6);
+  if (offset === 0) return "This week · " + shortDate(s) + " – " + shortDate(e);
+  return shortDate(s) + " – " + shortDate(e);
+}
+const weekTag = (isoMonday) => "w/c " + shortDate(new Date(isoMonday + "T00:00:00"));
+const todayName = () =>
+  ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][
+    new Date().getDay()
+  ];
+
+function beep() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new Ctx();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.connect(g);
+    g.connect(ctx.destination);
+    o.type = "triangle";
+    o.frequency.value = 760;
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.7);
+    o.start();

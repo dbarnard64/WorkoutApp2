@@ -1,0 +1,709 @@
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 1000);
+  } catch (e) {
+    alert("Could not download. Use Copy backup instead and paste it somewhere safe.");
+  }
+}
+function restoreBackup(text) {
+  let d;
+  try {
+    d = JSON.parse(text);
+  } catch (e) {
+    alert("That does not look like a backup file. Paste the whole contents, starting with {");
+    return false;
+  }
+  if (!d || !d.programs || !d.programs.length) {
+    alert("No programs found in that backup.");
+    return false;
+  }
+  if (!confirm("Replace everything currently in the app with this backup?")) return false;
+  S.programs = d.programs;
+  S.activeId = d.activeId || d.programs[0].id;
+  S.log = { weeks: (d.log && d.log.weeks) || {}, settings: (d.log && d.log.settings) || {},
+    sessions: (d.log && d.log.sessions) || {}, body: (d.log && d.log.body) || {},
+    pbs: (d.log && d.log.pbs) || {}, cats: (d.log && d.log.cats) || {} };
+  cacheRaw = null;
+  S.sheet = null;
+  S.tab = "train";
+  /* a backup may predate the program-scoped slots or the timezone fix */
+  migrateKeys();
+  migrateWeekKeys();
+  migrateAnchor();
+  seedToday();
+  persist();
+  applyTheme();
+  return true;
+}
+
+/* ===== personal bests + 1RM ===== */
+function bestIndex(beforeWeek) {
+  const map = {};
+  Object.keys(S.log.weeks || {}).forEach((week) => {
+    if (beforeWeek && week >= beforeWeek) return;
+    const w = S.log.weeks[week];
+    Object.keys(w).forEach((k) => {
+      const e = w[k];
+      if (!e || !logName(e)) return;
+      setIdx(e).forEach((i) => {
+        const s = e[i];
+        if (!s || !s.d) return;
+        const ww = numOf(s.w);
+        if (isNaN(ww)) return;
+        const rr = numOf(s.r);
+        const key = nn(logName(e));
+        const cur = map[key];
+        if (!cur || ww > cur.w || (ww === cur.w && (rr || 0) > (cur.r || 0)))
+          map[key] = { w: ww, r: isNaN(rr) ? null : rr, week: week };
+      });
+    });
+  });
+  return map;
+}
+
+/* heaviest weight ever, and the best reps achieved at each weight */
+function recordIndex(beforeWeek) {
+  const map = {};
+  Object.keys(S.log.weeks || {}).forEach((week) => {
+    if (beforeWeek && week >= beforeWeek) return;
+    const w = S.log.weeks[week];
+    Object.keys(w).forEach((k) => {
+      const e = w[k];
+      if (!e || !logName(e)) return;
+      const key = nn(logName(e));
+      const m = map[key] || (map[key] = { maxW: -Infinity, reps: {} });
+      setIdx(e).forEach((i) => {
+        const s2 = e[i];
+        if (!s2 || !s2.d) return;
+        const ww = numOf(s2.w);
+        if (isNaN(ww)) return;
+        if (ww > m.maxW) m.maxW = ww;
+        const rr = numOf(s2.r);
+        if (!isNaN(rr) && (m.reps[ww] == null || rr > m.reps[ww])) m.reps[ww] = rr;
+      });
+    });
+  });
+  const man = manualPBs();
+  Object.keys(man).forEach(function (k) {
+    const m = man[k];
+    if (!m || m.hidden) return;
+    const w = numOf(m.w);
+    if (isNaN(w)) return;
+    const r = numOf(m.r);
+    const e = map[k] || (map[k] = { maxW: -Infinity, reps: {} });
+    if (w > e.maxW) e.maxW = w;
+    if (!isNaN(r) && (e.reps[w] == null || r > e.reps[w])) e.reps[w] = r;
+  });
+  return map;
+}
+
+/* A PB is heavier than you have ever gone, or more reps at that record weight.
+   Beating your reps at some lighter weight is a good day, not a record. */
+function pbKind(rec, e) {
+  if (!rec) return null;
+  let kind = null;
+  setIdx(e).forEach((i) => {
+    const s2 = e[i];
+    if (!s2 || !s2.d) return;
+    const w = numOf(s2.w);
+    if (isNaN(w)) return;
+    if (w > rec.maxW) {
+      kind = "pb";
+      return;
+    }
+    if (kind) return;
+    if (w === rec.maxW) {
+      const r = numOf(s2.r);
+      const best = rec.reps[w];
+      if (best != null && !isNaN(r) && r > best) kind = "pb";
+    }
+  });
+  return kind;
+}
+
+/* manual entries sit on top of what has been logged, for lifts you hit
+   before you started tracking. { hidden:true } removes a row from the list. */
+/* ===== categories ===== */
+const CATS = [
+  ["legs", "Legs"], ["chest", "Chest"], ["back", "Back"], ["shoulders", "Shoulders"],
+  ["arms", "Arms"], ["core", "Core"], ["cardio", "Conditioning"], ["other", "Other"],
+];
+const CAT_NAME = {};
+CATS.forEach(function (c) { CAT_NAME[c[0]] = c[1]; });
+
+/* confident name rules first, most specific at the top */
+const CAT_RULES = [
+  ["shoulders", /rear\s*delt|lateral\s*raise|face\s*pull|upright.{0,12}row|shrug|pec\s*deck|arnold|military/i],
+  ["legs", /leg\s*curl|leg\s*ext|calf|calves|squat|lunge|leg\s*press|hip\s*thrust|romanian|\brdl\b|glute|hamstring|adduct|abduct|step[-\s]?up|sled/i],
+  ["core", /crunch|plank|leg\s*raise|\babs?\b|sit[-\s]?up|russian|hollow|woodchop|hanging/i],
+  ["arms", /curl|tricep|pushdown|skull|kickback|hammer|preacher|wrist|forearm|overhead\s*(rope|ext)|close\s*grip/i],
+  ["back", /\brow\b|pulldown|pull[-\s]?up|chin[-\s]?up|\blat\b|deadlift|rack\s*pull|hyperext|pullover|straight\s*arm/i],
+  ["chest", /bench|chest|\bfly\b|flye|\bdip\b|\bpec\b|incline.{0,14}press|flat.{0,14}press/i],
+  ["shoulders", /shoulder|overhead|\bohp\b|delt/i],
+  ["cardio", /treadmill|walk|\brun\b|bike|cycle|erg|carry|farmer|sprint|conditioning/i],
+];
+/* the day a lift sits on is a good tie-breaker for bare names like "Press" */
+const DAY_RULES = [
+  ["legs", /leg|quad|hamstring|posterior|glute|lower/i],
+  ["back", /back|pull|lat/i],
+  ["chest", /chest|push/i],
+  ["shoulders", /shoulder|delt/i],
+  ["arms", /arm|bicep|tricep/i],
+  ["core", /core|\babs?\b/i],
+];
+
+function dayTitleIndex() {
+  const map = {};
+  S.programs.forEach(function (p) {
+    const dp = parseProgram(p.raw);
+    dp.days.forEach(function (d) {
+      const label = (d.title || d.name || "") + " " + (d.name || "");
+      d.items.forEach(function (it) {
+        if (it.kind === "ex" && !map[nn(it.name)]) map[nn(it.name)] = label;
+      });
+    });
+    /* exercises added on the day live in the log, not the program text, but their
+       day still says a lot about what they are */
+    const dayLabel = {};
+    dp.days.forEach(function (d, di) {
+      dayLabel[di] = (d.title || d.name || "") + " " + (d.name || "");
+    });
+    Object.keys(S.log.weeks || {}).forEach(function (wk) {
+      Object.keys(S.log.weeks[wk]).forEach(function (k) {
+        const m = k.indexOf(p.id + ":d") === 0 && k.match(/:d(\d+)a\d+$/);
+        const e = S.log.weeks[wk][k];
+        if (m && e && e.n && !map[nn(e.n)] && dayLabel[+m[1]] != null) map[nn(e.n)] = dayLabel[+m[1]];
+      });
+    });
+  });
+  return map;
+}
+
+function guessCat(name, dayLabel) {
+  for (let i = 0; i < CAT_RULES.length; i++)
+    if (CAT_RULES[i][1].test(name)) return CAT_RULES[i][0];
+  if (dayLabel)
+    for (let i = 0; i < DAY_RULES.length; i++)
+      if (DAY_RULES[i][1].test(dayLabel)) return DAY_RULES[i][0];
+  return "other";
+}
+
+function userCats() {
+  if (!S.log.cats) S.log.cats = {};
+  return S.log.cats;
+}
+function catOf(key, name, dayIdx) {
+  const u = userCats()[key];
+  if (u && CAT_NAME[u]) return u;
+  return guessCat(name || key, dayIdx ? dayIdx[key] : null);
+}
+
+function manualPBs() {
+  if (!S.log.pbs) S.log.pbs = {};
+  return S.log.pbs;
+}
+
+function knownNames() {
+  const nameOf = {};
+  S.programs.forEach(function (p) {
+    const dp = parseProgram(p.raw);
+    dp.days.forEach(function (d) {
+      d.items.forEach(function (it) {
+        if (it.kind === "ex") nameOf[nn(it.name)] = it.name;
+      });
+    });
+  });
+  Object.keys(S.log.weeks || {}).forEach(function (wk) {
+    const w = S.log.weeks[wk];
+    Object.keys(w).forEach(function (k) {
+      const e = w[k];
+      const ln = logName(e);
+      if (ln) nameOf[nn(ln)] = ln;
+    });
+  });
+  const man = manualPBs();
+  Object.keys(man).forEach(function (k) {
+    if (man[k] && man[k].name) nameOf[k] = man[k].name;
+  });
+  return nameOf;
+}
+
+function effectiveBests() {
+  const derived = bestIndex(null);
+  const man = manualPBs();
+  const nameOf = knownNames();
+  const out = {};
+  Object.keys(derived).forEach(function (k) {
+    out[k] = { name: nameOf[k] || k, w: derived[k].w, r: derived[k].r,
+      week: derived[k].week, src: "logged" };
+  });
+  Object.keys(man).forEach(function (k) {
+    const m = man[k];
+    if (!m) return;
+    if (m.hidden) {
+      delete out[k];
+      return;
+    }
+    const mw = numOf(m.w);
+    const mr = numOf(m.r);
+    if (isNaN(mw)) return;
+    const cur = out[k];
+    if (!cur || mw > cur.w || (mw === cur.w && (isNaN(mr) ? 0 : mr) > (cur.r || 0)))
+      out[k] = { name: m.name || nameOf[k] || k, w: mw, r: isNaN(mr) ? null : mr, src: "manual" };
+    else if (m.name) cur.name = m.name;
+  });
+  return out;
+}
+
+/* Epley */
+/* Epley inverted for three reps. A logged set of 3 returns itself. */
+function threeRM(w, r) {
+  const one = oneRM(w, r);
+  return one ? Math.round(one / 1.1) : null;
+}
+
+function oneRM(w, r) {
+  if (!w || !r || r <= 0 || r > 15) return null;
+  return Math.round(w * (1 + r / 30));
+}
+
+/* heaviest set logged this week for a lift */
+function thisWeekBest(key) {
+  const e = entriesFor(key);
+  let best = null;
+  setIdx(e).forEach((i) => {
+    const s = e[i];
+    if (!s || !s.d) return;
+    const ww = numOf(s.w);
+    if (isNaN(ww)) return;
+    const rr = numOf(s.r);
+    if (!best || ww > best.w) best = { w: ww, r: isNaN(rr) ? null : rr };
+  });
+  return best;
+}
+
+/* ===== deload ===== */
+function deloadActive() {
+  const p = activeProgram();
+  if (!p || !p.deload) return false;
+  const dp = parsedProgram();
+  if (!dp || !dp.length) return false;
+  const pw = programWeek(p.start, S.weekOff, dp.length, isNumberedDp(dp));
+  return !!(pw && !pw.before && pw.eff === dp.length);
+}
+function setsFor(it) {
+  const ov = weekSets(it.key);
+  if (ov != null) return ov;
+  const base = it.sets || 1;
+  return deloadActive() ? Math.max(1, Math.round(base * 0.5)) : base;
+}
+
+/* ===== manual ordering ===== */
+function orderedItems(day) {
+  const p = activeProgram();
+  const ord = p && p.order && p.order[day.id];
+  if (!ord || ord.length !== day.items.length) return day.items;
+  for (let i = 0; i < ord.length; i++) {
+    if (!(ord[i] >= 0 && ord[i] < day.items.length)) return day.items;
+  }
+  return ord.map((i) => day.items[i]);
+}
+function moveItem(day, from, dir) {
+  const p = activeProgram();
+  const cur =
+    p.order && p.order[day.id] && p.order[day.id].length === day.items.length
+      ? p.order[day.id].slice()
+      : day.items.map((_, i) => i);
+  const to = from + dir;
+  if (to < 0 || to >= cur.length) return;
+  const t = cur[from];
+  cur[from] = cur[to];
+  cur[to] = t;
+  p.order = Object.assign({}, p.order || {});
+  p.order[day.id] = cur;
+  persist();
+}
+function resetOrder(day) {
+  const p = activeProgram();
+  if (p.order) {
+    p.order = Object.assign({}, p.order);
+    delete p.order[day.id];
+    persist();
+  }
+}
+
+let offlineState = "Checking\u2026";
+
+/* ===== units ===== */
+const LB_PER_KG = 2.20462;
+const unit = () => settings().unit || "kg";
+const U = () => unit();
+
+function convertAll(to) {
+  const f = to === "lb" ? LB_PER_KG : 1 / LB_PER_KG;
+  /* lb to the nearest half pound, kg to one decimal */
+  const round = to === "lb" ? (v) => Math.round(v * 2) / 2 : (v) => Math.round(v * 10) / 10;
+  Object.keys(S.log.weeks || {}).forEach((wk) => {
+    const w = S.log.weeks[wk];
+    Object.keys(w).forEach((k) => {
+      setIdx(w[k]).forEach((i) => {
+        const s = w[k][i];
+        const v = numOf(s && s.w);
+        if (!isNaN(v)) s.w = String(round(v * f));
+        ((s && s.dr) || []).forEach(function (d2) {
+          const dv = numOf(d2.w);
+          if (!isNaN(dv)) d2.w = String(round(dv * f));
+        });
+      });
+    });
+  });
+  S.log.body = S.log.body || {};
+  Object.keys(S.log.body).forEach((d) => {
+    const v = numOf(S.log.body[d]);
+    if (!isNaN(v)) S.log.body[d] = round(v * f);
+  });
+  const man = S.log.pbs || {};
+  Object.keys(man).forEach(function (k) {
+    const m = man[k];
+    if (!m || m.hidden) return;
+    const v = numOf(m.w);
+    if (!isNaN(v)) m.w = String(round(v * f));
+  });
+  setSetting({ unit: to });
+  persist();
+}
+
+/* ===== overload nudge ===== */
+function repRangeTop(reps) {
+  if (!reps) return null;
+  const m = String(reps).match(/(\d+)\s*(?:[\u2013\u2014-]\s*(\d+))?/);
+  if (!m) return null;
+  return m[2] ? +m[2] : +m[1];
+}
+function nudge(it, lastBest) {
+  if (!settings().nudge && settings().nudge !== undefined) return null;
+  if (!lastBest) return null;
+  const w = numOf(lastBest.w);
+  const r = numOf(lastBest.r);
+  if (isNaN(w)) return null;
+  const top = repRangeTop(it.reps);
+  if (!isNaN(r) && top && r >= top) {
+    const step = unit() === "lb" ? 5 : 2.5;
+    const inc = Math.max(step, Math.round((w * 0.025) / step) * step);
+    return "try " + (w + inc) + " " + U();
+  }
+  if (!isNaN(r)) return "try " + w + " " + U() + " \u00d7 " + (r + 1);
+  return null;
+}
+
+/* ===== copy last week ===== */
+function previousWeekKey() {
+  const cur = wkNow();
+  const keys = Object.keys(S.log.weeks || {}).filter((k) => k < cur).sort();
+  return keys.length ? keys[keys.length - 1] : null;
+}
+function canCopyLast(day) {
+  const pk = previousWeekKey();
+  if (!pk) return false;
+  const prev = S.log.weeks[pk];
+  return day.items.some(
+    (it) =>
+      it.kind === "ex" &&
+      Object.keys(prev).some(function (k) {
+        const ln = logName(prev[k]);
+        return ln && nn(ln) === nn(shownName(it));
+      })
+  );
+}
+function copyLastWeek(day) {
+  const pk = previousWeekKey();
+  if (!pk) return 0;
+  const prev = S.log.weeks[pk];
+  const wk = wkNow();
+  S.log.weeks[wk] = S.log.weeks[wk] || {};
+  let n = 0;
+  day.items.forEach((it) => {
+    if (it.kind !== "ex") return;
+    const src = Object.keys(prev)
+      .map((k) => prev[k])
+      .find(function (e) {
+        const ln = logName(e);
+        return ln && nn(ln) === nn(shownName(it));
+      });
+    if (!src) return;
+    const tgt = (S.log.weeks[wk][it.key] = S.log.weeks[wk][it.key] || {});
+    tgt.n = it.name;
+    const total = setsFor(it);
+    const srcSets = setIdx(src).map((i) => src[i]).filter((s) => s && (s.w || s.r));
+    for (let i = 0; i < total; i++) {
+      const s = srcSets[Math.min(i, srcSets.length - 1)];
+      if (!s) break;
+      tgt[i] = Object.assign({}, tgt[i], { w: s.w || "", r: s.r || "" });
+      /* a drop-set structure belongs to its exact set, not the repeated tail */
+      if (i < srcSets.length && s.dr && s.dr.length && !tgt[i].dr)
+        tgt[i].dr = s.dr.map(function (d2) {
+          return { w: d2.w || "", r: "" };
+        });
+      n++;
+    }
+  });
+  persist();
+  return n;
+}
+
+/* ===== progress data ===== */
+function weeklyTonnage(limit) {
+  const out = [];
+  Object.keys(S.log.weeks || {})
+    .sort()
+    .forEach((wk) => {
+      let v = 0;
+      const w = S.log.weeks[wk];
+      Object.keys(w).forEach((k) =>
+        setIdx(w[k]).forEach((i) => {
+          const s = w[k][i];
+          if (!s || !s.d) return;
+          const ww = numOf(s.w);
+          const rr = numOf(s.r);
+          if (!isNaN(ww) && !isNaN(rr) && dropsComplete(s)) {
+            v += ww * rr;
+            (s.dr || []).forEach(function (d2) {
+              v += numOf(d2.w) * numOf(d2.r);
+            });
+          }
+        })
+      );
+      if (v > 0) out.push({ week: wk, v: Math.round(v) });
+    });
+  return limit ? out.slice(-limit) : out;
+}
+
+function bodySeries(limit) {
+  const b = S.log.body || {};
+  const out = Object.keys(b)
+    .sort()
+    .map((d) => ({ d: d, v: numOf(b[d]) }))
+    .filter((x) => !isNaN(x.v));
+  return limit ? out.slice(-limit) : out;
+}
+function logBody(dateISO, v) {
+  S.log.body = S.log.body || {};
+  const n = numOf(v);
+  if (isNaN(n)) delete S.log.body[dateISO];
+  else S.log.body[dateISO] = n;
+  persist();
+}
+const todayISO = () => window.__today || ymd(new Date());
+
+/* ===== tiny charts ===== */
+function barChart(data, fmt) {
+  if (!data.length)
+    return '<div style="color:var(--faint);font-size:13px">Nothing logged yet.</div>';
+  const max = Math.max.apply(null, data.map((d) => d.v)) || 1;
+  const slots = Math.max(data.length, 5);
+  const bw = 100 / slots;
+  const off = ((slots - data.length) / 2) * bw; /* centre a short series */
+  const bars = data
+    .map((d, i) => {
+      const h = Math.max(2, (d.v / max) * 100);
+      return (
+        '<rect x="' + (off + i * bw + bw * 0.2) + '" y="' + (100 - h) + '" width="' + bw * 0.6 +
+        '" height="' + h + '" fill="var(--brass)" rx="0.6"></rect>'
+      );
+    })
+    .join("");
+  const labels =
+    (off > 0 ? '<span style="flex:' + off + '"></span>' : "") +
+    data
+      .map(
+        (d) =>
+          '<span style="flex:' + bw + ';text-align:center;color:var(--faint);font-size:10px">' +
+          shortDate(new Date(d.week + "T00:00:00")).replace(/\s/g, "\u00a0") + "</span>"
+      )
+      .join("") +
+    (off > 0 ? '<span style="flex:' + off + '"></span>' : "");
+  return (
+    '<svg viewBox="0 0 100 100" preserveAspectRatio="none" style="width:100%;height:110px;display:block">' +
+    bars + "</svg>" +
+    '<div style="display:flex;margin-top:6px">' + labels + "</div>" +
+    '<div class="tnum" style="color:var(--mute);font-size:12px;margin-top:8px">Peak ' +
+    fmt(max) + " · latest " + fmt(data[data.length - 1].v) + "</div>"
+  );
+}
+
+function lineChart(data) {
+  if (data.length < 2)
+    return '<div style="color:var(--faint);font-size:13px">Log at least two entries to see a trend.</div>';
+  const vs = data.map((d) => d.v);
+  const min = Math.min.apply(null, vs);
+  const max = Math.max.apply(null, vs);
+  const flat = max - min < 0.001;
+  const span = flat ? 1 : max - min;
+  const pts = data
+    .map((d, i) => {
+      const x = (i / (data.length - 1)) * 100;
+      const y = flat ? 50 : 95 - ((d.v - min) / span) * 90;
+      return x.toFixed(1) + "," + y.toFixed(1);
+    })
+    .join(" ");
+  const dots = data
+    .map((d, i) => {
+      const x = ((i / (data.length - 1)) * 100).toFixed(1);
+      const y = (flat ? 50 : 95 - ((d.v - min) / span) * 90).toFixed(1);
+      /* zero-length round-capped stroke: a perfect dot even though the canvas
+         stretches non-uniformly (circles would smear into dashes) */
+      return '<polyline points="' + x + "," + y + " " + x + "," + y +
+        '" stroke="var(--brass)" stroke-width="7" stroke-linecap="round" ' +
+        'vector-effect="non-scaling-stroke" fill="none"/>';
+    })
+    .join("");
+  const first = data[0];
+  const last = data[data.length - 1];
+  const diff = Math.round((last.v - first.v) * 10) / 10;
+  return (
+    '<svg viewBox="0 0 100 100" preserveAspectRatio="none" style="width:100%;height:110px;display:block">' +
+    '<polygon points="0,100 ' + pts + ' 100,100" fill="var(--brass)" opacity="0.09"/>' +
+    '<polyline points="' + pts + '" fill="none" stroke="var(--brass)" stroke-width="1.6" ' +
+    'vector-effect="non-scaling-stroke" stroke-linejoin="round"/>' + dots + "</svg>" +
+    '<div class="tnum" style="color:var(--mute);font-size:12px;margin-top:8px">' +
+    last.v + " " + U() + " on " + shortDate(new Date(last.d + "T00:00:00")) +
+    " · " + (diff >= 0 ? "+" : "") + diff + " " + U() + " since " +
+    shortDate(new Date(first.d + "T00:00:00")) + "</div>"
+  );
+}
+
+
+/* ===== backup nagging ===== */
+function daysSinceBackup() {
+  const t = settings().lastBackup;
+  if (!t) return null;
+  return Math.floor((Date.now() - t) / 86400000);
+}
+function backupDue() {
+  if (settings().hideBackupBar) return false;
+  const anyData = Object.keys(S.log.weeks || {}).length > 0;
+  if (!anyData) return false;
+  const d = daysSinceBackup();
+  return d === null || d >= 7;
+}
+function markBackedUp() {
+  setSetting({ lastBackup: Date.now() });
+}
+
+/* ===== program builder: assembles the app's own text format ===== */
+
+const DAY_CHOICES = [
+  "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+  "Day 1", "Day 2", "Day 3", "Day 4", "Day 5", "Day 6", "Day 7",
+];
+
+function newBuild() {
+  return { title: "", start: mondayISO(), weeks: 8, days: [], open: 0, preview: false };
+}
+
+function buildText(b) {
+  const out = [];
+  const t = (b.title || "My program").trim();
+  const hasWeeks = /\bweeks?\b/i.test(t);
+  out.push(b.weeks > 1 && !hasWeeks ? t + " (" + b.weeks + " weeks)" : t);
+  b.days.forEach((d) => {
+    const items = d.items.filter((x) => (x.name || "").trim());
+    if (!items.length) return; /* a day with nothing in it is not a day */
+    out.push("");
+    out.push(d.name + (d.title && d.title.trim() ? " - " + d.title.trim() : ""));
+    items.forEach((x) => {
+      const nm = (x.name || "").trim();
+      const alt = x.alt === "odd" ? " (odd weeks)" : x.alt === "even" ? " (even weeks)" : "";
+      const sets = String(x.sets || "").trim();
+      const reps = String(x.reps || "").trim();
+      let tail = "";
+      if (sets && reps) tail = " - " + sets + "x" + reps;
+      else if (sets) tail = " - " + sets + " sets";
+      else if (reps) tail = " x" + reps;
+      out.push(nm + alt + tail);
+    });
+  });
+  return out.join("\n");
+}
+
+function buildValid(b) {
+  return b.days.some((d) => d.items.some((x) => (x.name || "").trim()));
+}
+
+function vBuildEx(di, i, x) {
+  const alts = [["", "Every week"], ["odd", "Odd"], ["even", "Even"]];
+  return (
+    '<div class="bex">' +
+    '<div class="row" style="gap:8px">' +
+    '<label class="fld grow"><input placeholder="Exercise name" value="' + esc(x.name) +
+    '" data-in="b-exname" data-d="' + di + '" data-i="' + i + '"></label>' +
+    '<button class="mv" data-act="b-ex-up" data-d="' + di + '" data-i="' + i + '">&#9650;</button>' +
+    '<button class="mv" data-act="b-ex-dn" data-d="' + di + '" data-i="' + i + '">&#9660;</button>' +
+    '<button class="mv" data-act="b-del-ex" data-d="' + di + '" data-i="' + i + '">&times;</button>' +
+    "</div>" +
+    '<div class="row" style="gap:8px;margin-top:8px">' +
+    '<label class="fld" style="width:88px"><input class="tnum" inputmode="numeric" placeholder="4" value="' +
+    esc(x.sets) + '" data-in="b-exsets" data-d="' + di + '" data-i="' + i + '"><em>sets</em></label>' +
+    '<label class="fld grow"><input class="tnum" placeholder="8-10" value="' + esc(x.reps) +
+    '" data-in="b-exreps" data-d="' + di + '" data-i="' + i + '"><em>reps</em></label>' +
+    "</div>" +
+    '<div class="segs" style="margin-top:8px">' +
+    alts
+      .map(function (a) {
+        const on = (x.alt || "") === a[0];
+        return (
+          '<button class="seg' + (on ? " on" : "") + '" style="height:34px;font-size:13px" ' +
+          'data-act="b-alt" data-d="' + di + '" data-i="' + i + '" data-v="' + a[0] + '">' +
+          a[1] + "</button>"
+        );
+      })
+      .join("") +
+    "</div></div>"
+  );
+}
+
+function vBuild() {
+  const b = S.build;
+  const days = b.days
+    .map((d, di) => {
+      const open = b.open === di;
+      const named = d.items.filter((x) => (x.name || "").trim()).length;
+      return (
+        '<div class="block' + (open ? " on" : "") + '" style="margin-top:12px">' +
+        '<div class="row">' +
+        '<button class="grow" data-act="b-open-day" data-i="' + di + '">' +
+        '<div class="ttl">' + esc(d.name) + (d.title ? " · " + esc(d.title) : "") + "</div>" +
+        '<div class="sub tnum">' + named + (named === 1 ? " exercise" : " exercises") + "</div></button>" +
+        '<button class="mv" data-act="b-day-up" data-i="' + di + '">&#9650;</button>' +
+        '<button class="mv" data-act="b-day-dn" data-i="' + di + '">&#9660;</button>' +
+        '<button class="mv" data-act="b-del-day" data-i="' + di + '">&times;</button>' +
+        "</div>" +
+        (open
+          ? '<div style="margin-top:12px">' +
+            '<div class="row" style="gap:8px">' +
+            '<select class="datefld grow" data-in="b-dayname" data-i="' + di + '">' +
+            DAY_CHOICES.map(
+              (c) =>
+                '<option value="' + c + '"' + (c === d.name ? " selected" : "") + ">" + c + "</option>"
+            ).join("") +
+            "</select>" +
+            '<label class="fld grow"><input placeholder="Title, e.g. Back" value="' + esc(d.title) +
+            '" data-in="b-daytitle" data-i="' + di + '"></label>' +
+            "</div>" +
+            d.items.map((x, i) => vBuildEx(di, i, x)).join("") +
+            '<button class="dash" style="height:44px;margin-top:12px" data-act="b-add-ex" data-i="' + di +
+            '">+ Add exercise</button></div>'
+          : "") +
+        "</div>"
+      );
+    })
+    .join("");
+
+  return (
+    '<div class="paste"><div class="wrap">' +
+    '<div class="top"><div><div class="eyebrow on">Build a program</div>' +
+    "<h1>From scratch</h1>" +
+    "<p>Add days, then exercises. Saved as editable text, so you can fine-tune it afterwards " +
+    "with the pencil icon.</p></div>" +
+    '<button class="iconbtn" data-act="b-cancel" style="font-size:20px">&times;</button></div>' +
+
