@@ -191,18 +191,17 @@ if (!("serviceWorker" in navigator)) {
   navigator.serviceWorker
     .register("sw.js")
     .then(function () {
-      setOffline("Ready — opens with no signal");
+      setOffline("Ready \u2014 opens with no signal");
     })
     .catch(function () {
       setOffline("Could not cache (sw.js missing?)");
     });
 } else if (location.protocol === "file:") {
-  setOffline("Already local — no caching needed");
+  setOffline("Already local \u2014 no caching needed");
 } else {
   setOffline("Needs an https address");
 }
 
 </script>
-<!-- build: 2026-08-30 - published from src/chunks by the chunked deploy pipeline -->
 </body>
 </html>
