@@ -352,8 +352,15 @@ function vTrain(dp) {
       '<button class="btn-ghost" data-act="order-reset">Reset order</button>' +
       '<button class="btn-primary" data-act="reorder-off">Done</button></div>';
   } else {
-    body =
-      (canCopyLast(day)
+    const swapd = daySwap(day);
+    body = swapd
+      ? '<div class="warn" style="margin-bottom:12px">' +
+        esc(swapd.t || "Stand-in workout") + " &mdash; instead of " +
+        esc(day.title || day.name) +
+        ". Logging it still completes this program day, and the program is back next week." +
+        '<div style="margin-top:10px"><button class="btn-ghost" style="margin:0" data-act="dayswap-off">' +
+        "Back to the program</button></div></div>"
+      : (canCopyLast(day)
         ? '<button class="copylast" data-act="copy-last">Copy last week\'s weights</button>'
         : "") +
       items
@@ -369,7 +376,10 @@ function vTrain(dp) {
     body += extras.map(function (it) { return vCard(it, hist, pb); }).join("");
     body +=
       '<button class="dash" style="margin-top:12px" data-act="addex-open">+ Add an exercise to today</button>';
-    if (day.items.some((x) => x.kind === "ex") || extras.length)
+    if (!swapd && day.items.some((x) => x.kind === "ex"))
+      body +=
+        '<button class="dash" style="margin-top:8px" data-act="dayswap-open">&#8646; Swap this whole day</button>';
+    if ((swapd ? extras.length : day.items.some((x) => x.kind === "ex")) || extras.length)
       body +=
         '<button class="finish' + (session ? " logged" : "") + '" data-act="finish">' +
         (session ? "Session logged · view summary" : "Finish workout") + "</button>";
@@ -443,6 +453,37 @@ function vAddExSheet() {
       '<div class="row" style="gap:12px;margin-top:20px">' +
       '<button class="btn-ghost" data-act="sheet-close">Cancel</button>' +
       '<button class="btn-primary" data-act="ax-save">Add it</button></div>'
+  );
+}
+
+function vDaySwapSheet() {
+  const p = S.sheet;
+  const singles = S.programs.filter(isSingle);
+  const list = singles.length
+    ? '<div class="pblist">' +
+      singles.map(function (g) {
+        const gdp = applyFixes(parseProgram(g.raw), g.fixes);
+        const n = gdp.days[0].items.filter(function (x) { return x.kind === "ex"; }).length;
+        return (
+          '<button class="pbrow" style="width:100%;text-align:left" data-act="dayswap-pick" data-pid="' +
+          g.id + '">' +
+          '<div class="grow"><div style="font-size:15px;font-weight:600">' +
+          esc(g.title || gdp.title || "Workout") + "</div>" +
+          '<div style="color:var(--faint);font-size:12px">' + n +
+          (n === 1 ? " exercise" : " exercises") + "</div></div>" +
+          '<span style="color:var(--brass);font-size:13px">Use &rsaquo;</span></button>'
+        );
+      }).join("") + "</div>"
+    : '<p style="color:var(--faint);font-size:14px;line-height:1.6">No grab-and-go workouts yet. ' +
+      "Add one on the Programs tab &mdash; a single workout, no week structure &mdash; and it will be listed here.</p>";
+  return sheetShell(
+    "Just for this week",
+    "Swap the whole day",
+    '<p style="color:var(--mute);font-size:13px;line-height:1.6;margin:0 0 12px">Trade ' +
+      esc(p.orig) + " for one of your grab-and-go workouts. Logging it still completes this " +
+      "program day, and the program is back next week.</p>" + list +
+      '<div class="row" style="gap:12px;margin-top:20px">' +
+      '<button class="btn-ghost" data-act="sheet-close">Cancel</button></div>'
   );
 }
 
