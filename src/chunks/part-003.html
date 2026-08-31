@@ -77,7 +77,7 @@ function programWeek(startISO, weekOff, length, anchored) {
     const t = new Date();
     t.setHours(0, 0, 0, 0);
     cur = new Date(s);
-    cur.setDate(cur.getDate() + (Math.floor((t - s) / 604800000) + weekOff) * 7);
+    cur.setDate(cur.getDate() + (Math.floor(Math.round((t - s) / 86400000) / 7) + weekOff) * 7);
   } else {
     cur = mondayOf(weekOff);
   }
@@ -157,6 +157,25 @@ function dayExtras(di) {
     .sort(function (a, b) { return a.ord - b.ord; });
 }
 
+/* A whole day can stand aside for the week. The trade lives on that week's
+   log exactly like an exercise swap does, keyed in the parked namespace so
+   slot repair never touches it; the program is untouched and next week the
+   day is back. Logging the session still files under the program's own day. */
+function daySwapKey(dayId) {
+  const p = activeProgram();
+  return (p ? p.id + ":" : "") + "x:day:" + dayId;
+}
+function daySwap(day) {
+  if (!day) return null;
+  const w = S.log.weeks[wkNow()] || {};
+  return w[daySwapKey(day.id)] || null;
+}
+/* what the day actually presents this week: a traded day hides the program's
+   own exercises so progress and the summary count only what is real */
+function liveDayItems(day) {
+  return daySwap(day) ? [] : day.items;
+}
+
 function currentDayIndex() {
   const dp = parsedProgram();
   const day = dp.days[S.dayIdx] || dp.days[0];
@@ -201,7 +220,7 @@ function summarize(day, entriesFor, eff) {
   let exTotal = 0;
   let unweighted = 0;
   const lines = [];
-  day.items.concat(dayExtras(dayIndexOf(day))).forEach((it) => {
+  liveDayItems(day).concat(dayExtras(dayIndexOf(day))).forEach((it) => {
     if (it.kind !== "ex") return;
     if (!itemActive(it, eff) && !anyTicked(entriesFor(it.key))) return;
     exTotal++;
@@ -631,7 +650,7 @@ function dayProgress(day) {
   const eff = effWeek();
   let total = 0,
     done = 0;
-  day.items.concat(dayExtras(dayIndexOf(day))).forEach((it) => {
+  liveDayItems(day).concat(dayExtras(dayIndexOf(day))).forEach((it) => {
     if (it.kind !== "ex") return;
     const e = entriesFor(it.key);
     if (!itemActive(it, eff) && !anyTicked(e)) return;
@@ -724,6 +743,13 @@ function repairKeys(dp, pid) {
     claims.forEach(function (c) {
       if (c.name && dupe[c.name]) {
         out[c.k] = c.e; /* ambiguous name, keep its position */
+        return;
+      }
+      /* a swapped entry legitimately answers to a name the program does not
+         have; while its slot is still in the program it stays put, because
+         parking it would silently undo the swap and hide its logged sets */
+      if (c.e && c.e.alt && !c.to && nameOfKey[c.k] && !out[c.k]) {
+        out[c.k] = c.e;
         return;
       }
       if (!c.name) {
