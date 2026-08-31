@@ -609,7 +609,8 @@ function anchorOf(offset) {
   const s = new Date(a + "T00:00:00");
   const t = new Date();
   t.setHours(0, 0, 0, 0);
-  const k0 = Math.floor((t - s) / 604800000);
+  /* whole days first: a DST hour must not pull a week boundary back */
+  const k0 = Math.floor(Math.round((t - s) / 86400000) / 7);
   s.setDate(s.getDate() + (k0 + offset) * 7);
   return s;
 }
