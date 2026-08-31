@@ -174,7 +174,7 @@ document.addEventListener("click", (ev) => {
         sets: stats.setsDone,
         volume: stats.volume,
         pn: ap ? ap.title : "",
-        dn: singleNow ? "" : day.title || day.name || "",
+        dn: singleNow ? "" : (daySwap(day) && daySwap(day).t) || day.title || day.name || "",
         gg: singleNow ? 1 : 0,
       };
       if (singleNow) {
@@ -265,6 +265,24 @@ document.addEventListener("click", (ev) => {
       const sp = S.sheet;
       const nm = (sp.name || "").trim();
       writeEntry(sp.key, "alt", !nm || nn(nm) === nn(sp.orig) ? null : nm, sp.orig);
+      /* sets that were parked when an earlier build lost this swap's slot
+         come home the moment the same swap is made again */
+      if (nm) {
+        const wk0 = wkNow();
+        const w0 = S.log.weeks[wk0] || {};
+        const ap0 = activeProgram();
+        const pk0 = (ap0 ? ap0.id : "") + ":x:" + nn(nm);
+        const parked = w0[pk0];
+        if (parked && w0[sp.key]) {
+          const ex0 = w0[sp.key];
+          setIdx(parked).forEach(function (i) {
+            if (ex0[i] == null) ex0[i] = parked[i];
+          });
+          if (parked.sets != null && ex0.sets == null) ex0.sets = parked.sets;
+          delete w0[pk0];
+          persist();
+        }
+      }
       S.sheet = null;
       break;
     }
@@ -278,6 +296,55 @@ document.addEventListener("click", (ev) => {
       break;
     case "addex-open":
       S.sheet = { type: "addex", di: currentDayIndex(), name: "", sets: "", reps: "" };
+      break;
+    case "dayswap-open": {
+      const dsd = currentDay();
+      S.sheet = { type: "dayswap", di: currentDayIndex(), dayId: dsd.id,
+        orig: dsd.title || dsd.name };
+      break;
+    }
+    case "dayswap-pick": {
+      const sh = S.sheet;
+      const g = S.programs.find(function (x) { return x.id === el.dataset.pid; });
+      if (!g) break;
+      const gdp = applyFixes(parseProgram(g.raw), g.fixes);
+      const wkd = wkNow();
+      if (!S.log.weeks[wkd]) S.log.weeks[wkd] = {};
+      const pidd = activeProgram().id;
+      S.log.weeks[wkd][daySwapKey(sh.dayId)] = {
+        t: g.title || gdp.title || "Stand-in workout", src: g.id };
+      /* a snapshot, not a link: the day keeps what was picked even if the
+         grab-and-go workout is edited later */
+      gdp.days[0].items.forEach(function (it) {
+        if (it.kind !== "ex") return;
+        let n = 0;
+        while (S.log.weeks[wkd][pidd + ":d" + sh.di + "a" + n]) n++;
+        S.log.weeks[wkd][pidd + ":d" + sh.di + "a" + n] = {
+          n: it.name,
+          sets: Math.min(20, Math.max(1, parseInt(it.sets, 10) || 3)),
+          reps: (it.reps || "") + "",
+          ds: 1, /* placed by the day swap, so undoing it can tidy these away */
+        };
+      });
+      persist();
+      S.sheet = null;
+      break;
+    }
+    case "dayswap-off":
+      if (confirm("Bring the program day back? Sets you already logged are kept as added exercises.")) {
+        const wko = wkNow();
+        const wo2 = S.log.weeks[wko] || {};
+        delete wo2[daySwapKey(currentDay().id)];
+        /* the stand-in's own exercises leave with it, unless sets were logged
+           on them: logged work is never thrown away */
+        dayExtras(currentDayIndex()).forEach(function (it) {
+          const e2 = wo2[it.key];
+          if (!e2 || !e2.ds) return;
+          const touched = setIdx(e2).some(function (i) { return e2[i] && (e2[i].d || e2[i].w || e2[i].r); });
+          if (!touched) delete wo2[it.key];
+        });
+        persist();
+      }
       break;
     case "ax-save": {
       const sh = S.sheet;
