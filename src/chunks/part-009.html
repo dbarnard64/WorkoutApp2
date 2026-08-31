@@ -164,21 +164,31 @@ function migrateAnchor() {
     if (!isNumberedDp(dp)) return;
     const a = new Date(pr.start + "T00:00:00");
     if (isNaN(a.getTime()) || (a.getDay() + 6) % 7 === 0) return; /* Monday anchor: buckets already agree */
-    Object.keys(S.log.weeks || {}).forEach(function (bk) {
-      const bd = new Date(bk + "T00:00:00");
-      const t = Math.max(0, Math.floor((bd - a) / 604800000));
-      const tgt = new Date(a);
-      tgt.setDate(tgt.getDate() + t * 7);
-      const tk = ymd(tgt);
-      if (tk === bk) return;
-      const src = S.log.weeks[bk];
-      Object.keys(src).forEach(function (k) {
-        if (k.indexOf(pr.id + ":") !== 0) return;
-        S.log.weeks[tk] = S.log.weeks[tk] || {};
-        if (!(k in S.log.weeks[tk])) S.log.weeks[tk][k] = src[k];
-        delete src[k];
+    /* sessions were stranded by the same rounding fault as week entries,
+       so both stores get the same heal; mergeInto keeps whichever record
+       logged more work when a day was saved again in the meantime */
+    ["weeks", "sessions"].forEach(function (bucket) {
+      const store = S.log[bucket] || {};
+      Object.keys(store).forEach(function (bk) {
+        const bd = new Date(bk + "T00:00:00");
+        const t = Math.max(0, Math.floor(Math.round((bd - a) / 86400000) / 7));
+        const tgt = new Date(a);
+        tgt.setDate(tgt.getDate() + t * 7);
+        const tk = ymd(tgt);
+        if (tk === bk) return;
+        const src = store[bk];
+        const carry = {};
+        Object.keys(src).forEach(function (k) {
+          if (k.indexOf(pr.id + ":") !== 0) return;
+          carry[k] = src[k];
+          delete src[k];
+        });
+        if (Object.keys(carry).length) {
+          store[tk] = store[tk] || {};
+          mergeInto(store[tk], carry, bucket);
+        }
+        if (!Object.keys(src).length) delete store[bk];
       });
-      if (!Object.keys(src).length) delete S.log.weeks[bk];
     });
   });
 }
