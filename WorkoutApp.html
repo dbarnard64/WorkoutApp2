@@ -1119,6 +1119,8 @@ function currentDayIndex() {
    real days in the UI, empty of prescribed work, but fully trackable through
    the extras system so training on a rest day still counts. */
 function restSlotCount(dp) {
+  /* a grab-and-go workout has no week around it, so nothing to fill */
+  if (dp.days.length === 1 && !dp.length) return 0;
   return progAnchorISO() && dp.days.length < 7 ? 7 - dp.days.length : 0;
 }
 function restDayObj(idx) {
