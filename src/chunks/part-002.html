@@ -167,9 +167,19 @@ const REPS_RE =
   /^(\d{1,3}(\s*[–—\-/]\s*\d{1,3})?)\s*\+?\s*(reps?|steps?|secs?|seconds?|mins?|minutes?|each\s*side|per\s*side|\/\s*side|m|km|rounds?)?$/i;
 const OPEN_RE = /^(amrap|failure|to failure|max|max reps)$/i;
 const INFO_RE =
-  /(principle|progression|nutrition|meal|diet|note|why|overview|summary|guideline|deload|supplement|recovery|intro|about|structure|cardio|rules?\b|tips?\b|execution|progress\b|recommendation)/i;
+  /(principle|progression|nutrition|meal|diet|note|why|overview|summary|guideline|deload|supplement|recovery|intro|about|structure|cardio|rules?\b|tips?\b|execution|progress\b|recommendation|how\s+(?:i|we|you|to)\b|perform|technique|cues?\b)/i;
 const SECTION_RE =
   /^(giant\s*set|super\s*-?set|tri\s*-?set|circuit|drop\s*set|finish|warm\s*-?up|cool\s*-?down|part\s*\d)/i;
+/* column headings of a pasted table, and the |---|---| rule under them */
+const TBL_HEAD_RE =
+  /^(exercises?|movements?|lifts?|sets?|reps?|sets?\s*[x\u00d7]\s*reps?|intensity|effort|rir|rpe|tempo|rest|notes?|cues?|tips?|weight|load|target|focus)$/i;
+const tblCells = (l) =>
+  l.split(/\t+|\s*\|\s*/).map(function (c) { return c.trim(); }).filter(Boolean);
+const tblHeadRow = (l) =>
+  /[\t|]/.test(l) &&
+  tblCells(l).every(function (c) {
+    return TBL_HEAD_RE.test(c) || /^[-:\u2013\u2014\s]+$/.test(c);
+  });
 
 const isReps = (l) => REPS_RE.test(l) || OPEN_RE.test(l);
 const stripColon = (l) => l.replace(/\s*:\s*$/, "");
@@ -187,9 +197,24 @@ function dropMark(raw) {
   return { line: (raw.slice(0, m.index) + " " + raw.slice(m.index + m[0].length)).replace(/\s{2,}/g, " ").trim(), n: n };
 }
 
+/* A table copied out of a chat arrives as columns: the lift, its prescription,
+   and a column of commentary. Keep the name and whichever cell reads as sets
+   and reps; the rest is talk the log has no use for. The rebuilt line carries
+   no delimiter, so this hands back to inlineExercise exactly once. */
+function tableRow(raw) {
+  const cells = tblCells(raw);
+  if (cells.length < 2 || !/[a-z]/i.test(cells[0])) return null;
+  for (let i = 1; i < cells.length; i++) {
+    const ex = inlineExercise(cells[0] + " \u2013 " + cells[i]);
+    if (ex) return ex;
+  }
+  return null;
+}
+
 function inlineExercise(raw) {
   /* "Total: 20 sets" is a tally, not a lift */
   if (/^totals?\s*[:\-\u2013\u2014]/i.test(raw)) return null;
+  if (/[\t|]/.test(raw)) return tableRow(raw);
   const dm0 = dropMark(raw);
   const dropN = dm0.n;
   let line = dm0.line;
@@ -313,7 +338,8 @@ function parseProgram(text) {
       (l) =>
         l &&
         !/^[⸻—–\-*_=•·~]+$/.test(l) &&
-        !/^(exercise|exercises|sets|reps|set|rep)$/i.test(l)
+        !/^(exercise|exercises|sets|reps|set|rep)$/i.test(l) &&
+        !tblHeadRow(l)
     );
 
   const startsExercise = (k) => {
@@ -422,10 +448,13 @@ function parseProgram(text) {
       continue;
     }
 
+    /* a heading that reads as commentary opens an info section - unless it is
+       itself a prescribed lift, which no amount of wording should demote */
     const infoHead =
       !/[.!?]$/.test(line) &&
       words(line) <= 8 &&
       INFO_RE.test(line) &&
+      !inlineExercise(line) &&
       !(next && SETS_RE.test(next)) &&
       !nextIsExercise(lines, k);
 
