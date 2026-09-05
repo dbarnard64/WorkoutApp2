@@ -182,6 +182,14 @@ const tblHeadRow = (l) =>
   });
 
 const isReps = (l) => REPS_RE.test(l) || OPEN_RE.test(l);
+/* "Incline Machine Chest Press" then "3 x 10-12" - the prescription sits on the
+   line below the name. The day loop joins those two, so the scanners that hunt
+   for the first exercise have to know the same shape or they land a line late
+   and hand the name to the title. */
+const PRESC_RE = /^\d{1,2}\s*[\u00d7xX*]\s*\S/;
+const twoLineEx = (a, b) =>
+  !!(a && b && PRESC_RE.test(b) && !inlineExercise(a) &&
+     inlineExercise(a + " \u2013 " + b));
 const stripColon = (l) => l.replace(/\s*:\s*$/, "");
 const words = (l) => l.split(/\s+/).filter(Boolean).length;
 
@@ -261,7 +269,7 @@ function inlineExercise(raw) {
   m = line.match(
     /^(.{2,70}?)\s*[x\u00d7]\s*(\d{1,3}(?:\s*[\u2013\u2014-]\s*\d{1,3})?)\s*(reps?|steps?|each\s*side|per\s*side)?$/i
   );
-  if (m)
+  if (m && /[a-z]/i.test(m[1]))
     return { name: tidy(m[1]), sets: null, reps: (m[2] + " " + (m[3] || "")).trim() + qual, drop: dropN };
 
   m = line.match(/^(.{2,60}?)\s*:\s*(\d{1,2})\s*[x\u00d7]\s*(.{1,24})$/i);
@@ -274,6 +282,7 @@ function nextIsExercise(lines, k) {
   const a = lines[k + 1];
   if (!a) return false;
   if (inlineExercise(a)) return true;
+  if (twoLineEx(a, lines[k + 2])) return true;
   const b = lines[k + 2];
   const c = lines[k + 3];
   return !!(b && c && SETS_RE.test(b) && isReps(c));
@@ -340,12 +349,23 @@ function parseProgram(text) {
         !/^[⸻—–\-*_=•·~]+$/.test(l) &&
         !/^(exercise|exercises|sets|reps|set|rep)$/i.test(l) &&
         !tblHeadRow(l)
-    );
+    )
+    /* A table pasted out of a chat can arrive one cell per line, so its header
+       row comes through as a run of bare column names with no delimiter left to
+       recognise it by. Two or more in a row is that header; a lone "Notes" is a
+       heading someone meant to write. */
+    .filter(function (l, i, a) {
+      return (
+        !TBL_HEAD_RE.test(l) ||
+        !(TBL_HEAD_RE.test(a[i - 1] || "") || TBL_HEAD_RE.test(a[i + 1] || ""))
+      );
+    });
 
   const startsExercise = (k) => {
     const l = lines[k];
     if (!l) return false;
     if (inlineExercise(l)) return true;
+    if (twoLineEx(l, lines[k + 1])) return true;
     return !!(
       lines[k + 1] && lines[k + 2] &&
       SETS_RE.test(lines[k + 1]) && isReps(lines[k + 2]) &&
