@@ -196,7 +196,25 @@ function vProfile() {
   if (page === "calendar") return vCalendar();
   const all = sessionHistory(100000);
   const wk = wkNow();
-  const thisWk = Object.keys((S.log.sessions || {})[wk] || {}).length;
+  /* Session records are filed under a week key derived from the active
+     program's anchor, so a grab-and-go carrying its own start date lands in a
+     different bucket and the count changes with whichever program happens to
+     be selected. Count by date across every bucket instead. */
+  const wkA = ymd(anchorOf(S.weekOff));
+  const wkB = (function () {
+    const e = anchorOf(S.weekOff);
+    e.setDate(e.getDate() + 6);
+    return ymd(e);
+  })();
+  let thisWk = 0;
+  Object.keys(S.log.sessions || {}).forEach(function (bk) {
+    const bucket = S.log.sessions[bk] || {};
+    Object.keys(bucket).forEach(function (k) {
+      /* records written before the date stamp fall back to their bucket */
+      const d = bucket[k].d || bk;
+      if (d >= wkA && d <= wkB) thisWk++;
+    });
+  });
   const tile = function (p2, label, icon) {
     return (
       '<button class="tile" data-act="page" data-p="' + p2 + '">' + ICON[icon] +
