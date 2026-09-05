@@ -80,13 +80,17 @@ function vStrip(dp) {
         const isT = tIdx >= 0 && S.weekOff === 0 && i === tIdx;
         const wdd = new Date(aISO + "T00:00:00");
         wdd.setDate(wdd.getDate() + i);
+        /* a swapped-in workout or added exercises live on the rest slot too,
+           so the pill reports them rather than always reading "rest" */
+        const rpr = dayProgress(dayAt(dp, i));
         out +=
-          '<button class="pill rest' +
+          '<button class="pill' + (rpr.total ? "" : " rest") +
           (i === S.dayIdx ? " on" : "") +
           (isT ? " today" : "") +
           '" data-act="day" data-i="' + i + '">' +
           esc(wdd.toLocaleDateString(undefined, { weekday: "short" })) +
-          '<small class="tnum">rest</small>' +
+          '<small class="tnum">' +
+          (rpr.total ? rpr.done + "/" + rpr.total : "rest") + "</small>" +
           (sessionFor("d" + i) ? '<i class="dot"></i>' : "") +
           "</button>";
       }
@@ -310,6 +314,7 @@ function vTrain(dp) {
         "</button></div>"
       : "";
   const day = dayAt(dp, S.dayIdx);
+  const swapDay = daySwap(day);
   const pr = dayProgress(day);
   const hist = historyIndex();
   const pb = { rec: recordIndex(wkNow()), ever: bestIndex(null) };
@@ -352,12 +357,15 @@ function vTrain(dp) {
       '<button class="btn-ghost" data-act="order-reset">Reset order</button>' +
       '<button class="btn-primary" data-act="reorder-off">Done</button></div>';
   } else {
-    const swapd = daySwap(day);
+    const swapd = swapDay;
     body = swapd
       ? '<div class="warn" style="margin-bottom:12px">' +
-        esc(swapd.t || "Stand-in workout") + " &mdash; instead of " +
-        esc(day.title || day.name) +
-        ". Logging it still completes this program day, and the program is back next week." +
+        esc(swapd.t || "Stand-in workout") +
+        (day.rest
+          ? " &mdash; trained on a rest day. Logging it counts toward this week, " +
+            "and the rest day is back next week."
+          : " &mdash; instead of " + esc(day.title || day.name) +
+            ". Logging it still completes this program day, and the program is back next week.") +
         '<div style="margin-top:10px"><button class="btn-ghost" style="margin:0" data-act="dayswap-off">' +
         "Back to the program</button></div></div>"
       : (canCopyLast(day)
@@ -376,7 +384,7 @@ function vTrain(dp) {
     body += extras.map(function (it) { return vCard(it, hist, pb); }).join("");
     body +=
       '<button class="dash" style="margin-top:12px" data-act="addex-open">+ Add an exercise to today</button>';
-    if (!swapd && day.items.some((x) => x.kind === "ex"))
+    if (!swapd && (day.rest || day.items.some((x) => x.kind === "ex")))
       body +=
         '<button class="dash" style="margin-top:8px" data-act="dayswap-open">&#8646; Swap this whole day</button>';
     if ((swapd ? extras.length : day.items.some((x) => x.kind === "ex")) || extras.length)
@@ -402,7 +410,9 @@ function vTrain(dp) {
       ? new Date().toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }) +
         " \u00b7 grab-and-go"
       : dateLabel) + "</div>" +
-    (single ? "" : "<h1>" + esc(day.title || day.name) + "</h1>") +
+    (single
+      ? ""
+      : "<h1>" + esc((day.rest && swapDay && swapDay.t) || day.title || day.name) + "</h1>") +
     (dl
       ? '<div class="warn" style="margin-top:10px">Deload week &mdash; working sets cut by half. ' +
         "Keep the load moderate and the form clean.</div>"
