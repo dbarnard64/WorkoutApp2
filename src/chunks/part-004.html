@@ -237,7 +237,7 @@ function vCard(it, hist, pb) {
     '<div class="meta"><span class="tnum">' + esc(prescription(it)) + "</span>" +
     (rule ? '<span class="badge' + (off ? "" : " on") + ' tnum">' + esc(rule) + "</span>" : "") +
     (isUnclear(it) && !it.confirmed
-      ? '<button class="badge on" data-act="review">Confirm sets &amp; reps</button>'
+      ? '<span class="badge on" role="button" data-act="review">Confirm sets &amp; reps</span>'
       : "") +
     (kind ? '<span class="badge pb">PB</span>' : "") +
     "</div>" +
