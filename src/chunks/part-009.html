@@ -30,6 +30,17 @@ document.addEventListener("change", (ev) => {
   if (el.dataset.in === "b-start") S.build.start = el.value;
   if (el.dataset.in === "bodyw") render();
   if (el.dataset.in === "accent") applyAccent(el.value);
+  if (el.dataset.in === "restore-file") {
+    const f = el.files && el.files[0];
+    if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      S.restoreText = String(rd.result || "");
+      if (restoreBackup(S.restoreText)) render();
+    };
+    rd.onerror = () => alert("That file could not be read.");
+    rd.readAsText(f);
+  }
 });
 
 /* iOS fires change repeatedly while the colour picker is dragged, and re-rendering
