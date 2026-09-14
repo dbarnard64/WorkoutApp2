@@ -579,7 +579,7 @@ function parseProgram(text) {
       /:$/.test(line) ||
       /^total\b/i.test(line) ||
       /^[A-Z]{2,4}$/.test(line) ||
-      /\bRIR\b|\bFRs?\b|\bpartials?\b|final sets?\b|\u2192|\sF\s*$|\sF\s*\+/.test(line)
+      /\bRIR\b|\bFRs?\b|\bpartials?\b|\b[Ff]inal\s+[Ss]ets?\b|\b[Ll]ast\s+[Ss]ets?\b|\b[Ff]ailure\b|\u2192|\sF\s*$|\sF\s*\+/.test(line)
     ) {
       day.items.push({ kind: "note", text: line });
       continue;

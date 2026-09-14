@@ -10,7 +10,21 @@ function restoreBackup(text) {
   try {
     d = JSON.parse(text);
   } catch (e) {
-    alert("That does not look like a backup file. Paste the whole contents, starting with {");
+    /* a clipboard that dropped the tail is the common failure and looks
+       identical to garbage unless we check the ends and say where it broke */
+    const t = String(text || "").trim();
+    const at = (String(e && e.message).match(/position (\d+)/) || [])[1];
+    const where = at ? " It stops being readable at character " + at + " of " + t.length + "." : "";
+    alert(
+      !t
+        ? "Nothing to restore. Paste the backup text, or pick the file you downloaded."
+        : t.charAt(0) !== "{"
+        ? "That does not look like a backup. It should start with {"
+        : t.charAt(t.length - 1) !== "}"
+        ? "That backup is cut short \u2014 it should end with }." + where +
+          " Copying a large backup can drop the end of it, so pick the downloaded file instead."
+        : "That backup could not be read." + where
+    );
     return false;
   }
   if (!d || !d.programs || !d.programs.length) {

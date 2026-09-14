@@ -207,10 +207,11 @@ function vRestoreSheet() {
     "From a backup",
     "Restore",
     '<p style="color:var(--mute);font-size:13px;line-height:1.6;margin:0 0 12px">Paste the contents of a ' +
-      "backup file below. This replaces everything currently in the app.</p>" +
+      "backup file below, or pick the file you downloaded. This replaces everything "+ "currently in the app.</p>" +
+      '<label class="dash" style="margin:0 0 12px;cursor:pointer">Choose a backup file' + '<input type="file" accept="application/json,.json" data-in="restore-file"' + ' style="display:none"></label>' +
       '<textarea data-in="restore-text" style="width:100%;min-height:160px;background:var(--ink);' +
       'border:1px solid var(--line);border-radius:12px;padding:12px;font-size:13px" placeholder="{ ... }"></textarea>' +
-      '<button class="btn-primary" style="margin-top:16px" data-act="restore-go">Restore</button>'
+      '<button class="btn-primary" style="width:100%;margin-top:16px" data-act="restore-go">Restore</button>'
   );
 }
 

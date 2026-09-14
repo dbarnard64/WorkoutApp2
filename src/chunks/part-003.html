@@ -178,7 +178,9 @@ function liveDayItems(day) {
 
 function currentDayIndex() {
   const dp = parsedProgram();
-  const day = dp.days[S.dayIdx] || dp.days[0];
+  /* rest slots live past the end of dp.days, so index through dayAt or a
+     rest day resolves to day 0 and its extras land on the wrong day */
+  const day = dayAt(dp, S.dayIdx) || dp.days[0];
   return day ? dayIndexOf(day) : 0;
 }
 
