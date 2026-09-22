@@ -147,7 +147,32 @@ document.addEventListener("click", (ev) => {
       const k = el.dataset.key;
       const i = +el.dataset.i;
       const e = entriesFor(k);
-      patch(k, i, { d: !(e[i] && e[i].d) }, el.dataset.name);
+      const cur = e[i] || {};
+      /* tapping an empty set with a ghost behind it logs the ghost */
+      if (!cur.d && el.dataset.sw != null) {
+        patch(k, i, { w: el.dataset.sw, r: el.dataset.sr, d: true }, el.dataset.name);
+        break;
+      }
+      /* untapping empties the set, whether the numbers were tapped in or
+         typed: sets logged against the wrong day come off in one tap each
+         instead of backspacing every field. Drop children go with it. */
+      if (cur.d) {
+        const wipe = { w: "", r: "", d: false };
+        if ((cur.dr || []).length)
+          wipe.dr = cur.dr.map(function () {
+            return { w: "", r: "" };
+          });
+        let prev;
+        try {
+          prev = JSON.parse(JSON.stringify(cur));
+        } catch (e2) {
+          prev = Object.assign({}, cur);
+        }
+        patch(k, i, wipe, el.dataset.name);
+        offerUndo(k, i, el.dataset.name, prev);
+        break;
+      }
+      patch(k, i, { d: true }, el.dataset.name);
       break;
     }
     case "clear-day":
@@ -540,6 +565,12 @@ document.addEventListener("click", (ev) => {
     case "restsec":
       setSetting({ restSec: +el.dataset.s });
       break;
+    case "undo-take":
+      if (!takeUndo()) return;
+      break;
+    case "undo-drop":
+      dropUndo();
+      return;
     case "rest-add":
       startRest(restLeft() + 30);
       return;

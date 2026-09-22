@@ -854,6 +854,7 @@ function stopRest() {
   S.rest = null;
   const el = document.getElementById("timerbar");
   if (el) el.remove();
+  paintUndo();
 }
 function restLeft() {
   return S.rest ? Math.max(0, Math.ceil((S.rest.end - Date.now()) / 1000)) : 0;
@@ -869,6 +870,65 @@ function tickRest() {
   }
   paintTimer();
 }
+/* Clearing a set is one tap, so undoing it should be too. The bar lives
+   outside render() the way the rest timer does, so a re-render cannot
+   yank it away mid-tap. Nothing here is persisted: an undo that survived
+   a reload would be worse than no undo at all. */
+const UNDO_MS = 12000;
+let undoState = null;
+let undoTimer = null;
+let undoSeq = 0;
+
+function offerUndo(key, i, name, prev) {
+  clearTimeout(undoTimer);
+  const el = document.getElementById("undobar");
+  if (el) el.remove();
+  undoState = { key: key, i: i, name: name, prev: prev, seq: ++undoSeq };
+  undoTimer = setTimeout(dropUndo, UNDO_MS);
+  paintUndo();
+}
+
+function dropUndo() {
+  clearTimeout(undoTimer);
+  undoTimer = null;
+  undoState = null;
+  paintUndo();
+}
+
+function takeUndo() {
+  if (!undoState) return false;
+  const u = undoState;
+  const wk = wkNow();
+  S.log.weeks[wk] = S.log.weeks[wk] || {};
+  S.log.weeks[wk][u.key] = S.log.weeks[wk][u.key] || {};
+  if (u.name) S.log.weeks[wk][u.key].n = u.name;
+  /* put the set back exactly as it was, without re-arming the rest timer */
+  S.log.weeks[wk][u.key][u.i] = u.prev;
+  persist();
+  dropUndo();
+  return true;
+}
+
+function paintUndo() {
+  let el = document.getElementById("undobar");
+  if (!undoState) {
+    if (el) el.remove();
+    return;
+  }
+  if (!el || el.dataset.seq !== String(undoState.seq)) {
+    if (el) el.remove();
+    el = document.createElement("div");
+    el.id = "undobar";
+    el.dataset.seq = String(undoState.seq);
+    el.innerHTML =
+      '<div class="in"><span class="grow">Set ' + (undoState.i + 1) + " cleared</span>" +
+      '<button class="undo" data-act="undo-take">Undo</button>' +
+      '<button class="x" data-act="undo-drop">&times;</button></div>';
+    document.body.appendChild(el);
+  }
+  el.className = "undobar" + (document.getElementById("timerbar") ? " stacked" : "");
+}
+
 function paintTimer() {
   let el = document.getElementById("timerbar");
   if (!S.rest) {
@@ -891,6 +951,7 @@ function paintTimer() {
     '<button class="add" data-act="rest-add">+30s</button>' +
     '<button class="x" data-act="rest-stop">&times;</button>' +
     "</div></div>";
+  paintUndo();
 }
 
 /* ===== helpers ===== */

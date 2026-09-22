@@ -100,6 +100,28 @@ function vStrip(dp) {
   );
 }
 
+/* The nearest thing you already did: the last set filled in this session, or
+   failing that the same set index from the last session logged. It is shown as
+   a ghost in the empty fields and committed by tapping the disc, so a run of
+   straight sets needs taps and no keyboard. Nothing is stored until the tap. */
+function suggestSet(e, h, i) {
+  const filled = function (s) {
+    return (
+      s &&
+      String(s.w == null ? "" : s.w).trim() !== "" &&
+      String(s.r == null ? "" : s.r).trim() !== ""
+    );
+  };
+  for (let j = i - 1; j >= 0; j--) {
+    if (filled(e[j])) return { w: String(e[j].w).trim(), r: String(e[j].r).trim() };
+  }
+  const last = h && h[0];
+  if (!last || !last.sets.length) return null;
+  const s2 = last.sets[i] || last.sets[last.sets.length - 1];
+  if (!filled(s2)) return null;
+  return { w: String(s2.w).trim(), r: String(s2.r).trim() };
+}
+
 function vCard(it, hist, pb) {
   const eff = effWeek();
   const off = !itemActive(it, eff);
@@ -125,11 +147,20 @@ function vCard(it, hist, pb) {
   const nudgeTxt = mine ? null : nudge(it, lastBest);
 
   let discs = "";
+  const timed = isTimed(it);
   for (let i = 0; i < total; i++) {
     const on = !!(e[i] && e[i].d);
+    const cur = e[i] || {};
+    const blank =
+      String(cur.w == null ? "" : cur.w).trim() === "" &&
+      String(cur.r == null ? "" : cur.r).trim() === "";
+    const sg = !on && blank && !timed ? suggestSet(e, h, i) : null;
     discs +=
-      '<button class="disc' + (on ? " on" : "") + '" data-act="tick" data-key="' + it.key +
-      '" data-i="' + i + '" data-name="' + esc(it.name) + '">' + (on ? "&#10003;" : i + 1) + "</button>";
+      '<button class="disc' + (on ? " on" : "") + (sg ? " sug" : "") +
+      '" data-act="tick" data-key="' + it.key +
+      '" data-i="' + i + '" data-name="' + esc(it.name) + '"' +
+      (sg ? ' data-sw="' + esc(sg.w) + '" data-sr="' + esc(sg.r) + '"' : "") +
+      ">" + (on ? "&#10003;" : i + 1) + "</button>";
   }
 
   let detail = "";
@@ -143,12 +174,15 @@ function vCard(it, hist, pb) {
     for (let i = 0; i < total; i++) {
       const s = e[i] || {};
       const drops = s.dr || [];
+      const gh = suggestSet(e, h, i);
       const wField =
-        '<label class="fld"><input class="tnum" inputmode="decimal" placeholder="&mdash;" value="' +
+        '<label class="fld"><input class="tnum" inputmode="decimal" placeholder="' +
+        (gh ? esc(gh.w) : "&mdash;") + '" value="' +
         esc(s.w) + '" data-in="w" data-key="' + it.key + '" data-i="' + i +
         '" data-name="' + esc(it.name) + '"><em>' + U() + "</em></label>";
       const rField =
-        '<label class="fld"><input class="tnum" inputmode="decimal" placeholder="&mdash;" value="' +
+        '<label class="fld"><input class="tnum" inputmode="decimal" placeholder="' +
+        (gh ? esc(gh.r) : "&mdash;") + '" value="' +
         esc(s.r) + '" data-in="r" data-key="' + it.key + '" data-i="' + i +
         '" data-name="' + esc(it.name) + '"><em>reps</em></label>';
       if (!drops.length) {

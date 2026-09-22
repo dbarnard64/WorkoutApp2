@@ -413,6 +413,7 @@ function render() {
   const f = focusSnapshot();
   renderInner();
   focusRestore(f);
+  paintUndo();
 }
 
 function renderInner() {
