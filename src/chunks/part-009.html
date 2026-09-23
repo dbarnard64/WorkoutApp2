@@ -278,6 +278,87 @@ if (!("serviceWorker" in navigator)) {
   setOffline("Needs an https address");
 }
 
+/* The app opens from the page stored on the phone, and sw.js fetches a fresh
+   one behind it. When that brings a different build, offer a reload instead of
+   swapping the app out mid-set. Two routes in, so neither can be missed: the
+   worker says so the moment it has stored it, and the page also checks the
+   stored copy itself a few seconds after opening and whenever it comes back to
+   the foreground - between sets, the phone is usually locked. */
+/* Found in the first few seconds after opening, before a single tap, an
+   update is simply applied: the screen blinks while you are still reaching
+   for it and you land on the new build. Any later - weak signal, or you have
+   started - and it waits for the button, because a reload between sets is the
+   one moment it must not happen. Coming back from the background never
+   auto-applies: performance.now() keeps counting from the original launch.
+
+   Each build gets one automatic reload per session. If a reload ever landed
+   on a page that still did not match - one not served by the worker, say -
+   the next offer would trigger another, and another; the guard makes the
+   second one a button instead. */
+const AUTO_MS = 3000;
+const AUTO_KEY = "ironlog.autoReload";
+let touchedYet = false;
+["pointerdown", "touchstart", "keydown"].forEach(function (t) {
+  window.addEventListener(
+    t,
+    function () {
+      touchedYet = true;
+    },
+    { capture: true, passive: true, once: true }
+  );
+});
+
+function ownBuild() {
+  const m = document.querySelector('meta[name="build"]');
+  return m ? m.content : null;
+}
+function offerUpdate(build) {
+  if (!build || build === ownBuild() || build === updateHidden || build === updateReady) return;
+  if (!touchedYet && performance.now() < AUTO_MS) {
+    let tried = null;
+    let guarded = true;
+    try {
+      tried = sessionStorage.getItem(AUTO_KEY);
+      if (tried !== build) sessionStorage.setItem(AUTO_KEY, build);
+    } catch (e) {
+      guarded = false; /* no way to stop a loop, so no automatic reload */
+    }
+    if (guarded && tried !== build) {
+      location.reload();
+      return;
+    }
+  }
+  updateReady = build;
+  render();
+}
+function checkStoredBuild() {
+  if (!window.caches) return;
+  caches
+    .match(location.href, { ignoreSearch: true })
+    .then(function (r) {
+      return r ? r.text() : "";
+    })
+    .then(function (t) {
+      const m = /<meta name="build" content="([^"]+)"/.exec(t);
+      if (m) offerUpdate(m[1]);
+    })
+    .catch(function () {});
+}
+if (navigator.serviceWorker) {
+  navigator.serviceWorker.addEventListener("message", function (ev) {
+    if (ev.data && ev.data.type === "ironlog-update") offerUpdate(ev.data.build);
+  });
+  /* WebKit can hold worker messages until the page opts in, and a listener
+     added this way does not opt in by itself */
+  if (navigator.serviceWorker.startMessages) {
+    try { navigator.serviceWorker.startMessages(); } catch (e) {}
+  }
+  setTimeout(checkStoredBuild, 6000);
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") checkStoredBuild();
+  });
+}
+
 </script>
 </body>
 </html>

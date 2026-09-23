@@ -210,6 +210,19 @@ function dayIndexOf(day) {
   return dp ? dp.days.indexOf(day) : -1;
 }
 
+/* A typed zero in the reps box is a slip, not a set - nobody logs zero reps.
+   An EMPTY reps box is a different thing and stays legal, because that is how
+   bodyweight and timed work: a ticked set with no numbers is real. Zero WEIGHT
+   is legal too - bodyweight sets are logged at 0 kg, which is why this looks at
+   reps alone. */
+function repsBad(s) {
+  if (!s) return false;
+  const t = String(s.r == null ? "" : s.r).trim();
+  if (t === "") return false;
+  const n = numOf(t);
+  return isNaN(n) || n <= 0;
+}
+
 /* out of this week's plan, but if you ticked it you did it, so count it */
 function anyTicked(e) {
   const ks = setIdx(e);
@@ -676,7 +689,7 @@ function historyIndex() {
       if (!e || !logName(e)) return;
       const sets = setIdx(e)
         .map((x) => e[x])
-        .filter((s) => s && s.d && (s.w || s.r));
+        .filter((s) => s && s.d && (s.w || s.r) && !repsBad(s));
       if (!sets.length) return;
       const key = nn(logName(e));
       (map[key] = map[key] || []).push({ week, sets });
@@ -874,6 +887,12 @@ function tickRest() {
    outside render() the way the rest timer does, so a re-render cannot
    yank it away mid-tap. Nothing here is persisted: an undo that survived
    a reload would be worse than no undo at all. */
+/* Set when sw.js has stored a different build than the one running. Declared
+   up here, not beside the listener at the end of the file: the first render
+   reads it, and a let read before its line runs would stop the app booting. */
+let updateReady = null;
+let updateHidden = null;
+
 const UNDO_MS = 12000;
 let undoState = null;
 let undoTimer = null;

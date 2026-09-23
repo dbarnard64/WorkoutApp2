@@ -61,7 +61,7 @@ function bestIndex(beforeWeek) {
       if (!e || !logName(e)) return;
       setIdx(e).forEach((i) => {
         const s = e[i];
-        if (!s || !s.d) return;
+        if (!s || !s.d || repsBad(s)) return;
         const ww = numOf(s.w);
         if (isNaN(ww)) return;
         const rr = numOf(s.r);
@@ -88,7 +88,7 @@ function recordIndex(beforeWeek) {
       const m = map[key] || (map[key] = { maxW: -Infinity, reps: {} });
       setIdx(e).forEach((i) => {
         const s2 = e[i];
-        if (!s2 || !s2.d) return;
+        if (!s2 || !s2.d || repsBad(s2)) return;
         const ww = numOf(s2.w);
         if (isNaN(ww)) return;
         if (ww > m.maxW) m.maxW = ww;

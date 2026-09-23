@@ -84,12 +84,14 @@ function autoTick(key, i, name) {
   const hasW = String(s2.w == null ? "" : s2.w).trim() !== "";
   const hasR = String(s2.r == null ? "" : s2.r).trim() !== "";
   if (!hasW || !hasR) return;
+  if (repsBad(s2)) return;
   if (!dropsComplete(s2)) return;
   s2.d = true;
   if (name) ex.n = name;
   persist();
   if (settings().autoRest) startRest(settings().restSec);
   render();
+  return true;
 }
 
 /* ===== events ===== */
@@ -172,6 +174,9 @@ document.addEventListener("click", (ev) => {
         offerUndo(k, i, el.dataset.name, prev);
         break;
       }
+      /* nothing to log while the reps box reads zero; the field is
+         already marked, so the tap simply does not take */
+      if (repsBad(cur)) break;
       patch(k, i, { d: true }, el.dataset.name);
       break;
     }
@@ -565,6 +570,13 @@ document.addEventListener("click", (ev) => {
     case "restsec":
       setSetting({ restSec: +el.dataset.s });
       break;
+    case "update-go":
+      location.reload();
+      return;
+    case "update-hide":
+      updateHidden = updateReady;
+      updateReady = null;
+      break;
     case "undo-take":
       if (!takeUndo()) return;
       break;
@@ -827,7 +839,24 @@ document.addEventListener("input", (ev) => {
     const tI = +el.dataset.i;
     const tName = el.dataset.name;
     tickTimer = setTimeout(function () {
-      autoTick(tKey, tI, tName);
+      if (autoTick(tKey, tI, tName)) return;
+      /* Correcting a set that is already logged moves everything derived
+         from it: best ever, the PB pill, the rep-max estimates, the day
+         total, and the ghosts on later sets. autoTick bails on a logged
+         set, so without this the card keeps showing the old figures until
+         the next reload - a mistyped 45 reps still reading as a best long
+         after it was fixed. render() carries focus and caret across, so
+         this is safe mid-edit. */
+      const exNow = S.log.weeks[wkNow()] && S.log.weeks[wkNow()][tKey];
+      const sNow = exNow && exNow[tI];
+      if (!sNow) return;
+      /* a set cannot stay logged once its reps read zero: correcting a good
+         set down to 0 un-logs it, and fixing the number logs it again */
+      if (sNow.d && repsBad(sNow)) {
+        sNow.d = false;
+        persist();
+      }
+      if (sNow.d || repsBad(sNow)) render();
     }, 700);
     return;
   }

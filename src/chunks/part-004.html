@@ -109,7 +109,8 @@ function suggestSet(e, h, i) {
     return (
       s &&
       String(s.w == null ? "" : s.w).trim() !== "" &&
-      String(s.r == null ? "" : s.r).trim() !== ""
+      String(s.r == null ? "" : s.r).trim() !== "" &&
+      !repsBad(s)
     );
   };
   for (let j = i - 1; j >= 0; j--) {
@@ -181,7 +182,8 @@ function vCard(it, hist, pb) {
         esc(s.w) + '" data-in="w" data-key="' + it.key + '" data-i="' + i +
         '" data-name="' + esc(it.name) + '"><em>' + U() + "</em></label>";
       const rField =
-        '<label class="fld"><input class="tnum" inputmode="decimal" placeholder="' +
+        '<label class="fld' + (repsBad(s) ? " bad" : "") +
+        '"><input class="tnum" inputmode="decimal" placeholder="' +
         (gh ? esc(gh.r) : "&mdash;") + '" value="' +
         esc(s.r) + '" data-in="r" data-key="' + it.key + '" data-i="' + i +
         '" data-name="' + esc(it.name) + '"><em>reps</em></label>';
@@ -431,6 +433,11 @@ function vTrain(dp) {
     (single ? "" : vStrip(dp)) +
     '<div class="wrap">' +
     (preBanner ? '<div class="pad" style="padding-bottom:0">' + preBanner + "</div>" : "") +
+    (updateReady
+      ? '<div class="nag"><span class="grow">Update ready &middot; ' + esc(updateReady) + "</span>" +
+        '<button data-act="update-go">Reload</button>' +
+        '<button data-act="update-hide" class="x">&times;</button></div>'
+      : "") +
     (backupDue()
       ? '<div class="nag"><span class="grow">' +
         (daysSinceBackup() === null
