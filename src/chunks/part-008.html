@@ -289,11 +289,14 @@ document.addEventListener("click", (ev) => {
     }
     case "swap-open":
       S.sheet = { type: "swap", key: el.dataset.key, orig: el.dataset.orig,
-        name: entryField(el.dataset.key, "alt") || "" };
+        extra: !!el.dataset.extra, name: entryField(el.dataset.key, "alt") || "" };
+      break;
+    case "name-pick":
+      if (S.sheet) S.sheet.name = el.dataset.n;
       break;
     case "swap-save": {
       const sp = S.sheet;
-      const nm = (sp.name || "").trim();
+      const nm = canonName((sp.name || "").trim(), sp._cat);
       writeEntry(sp.key, "alt", !nm || nn(nm) === nn(sp.orig) ? null : nm, sp.orig);
       /* sets that were parked when an earlier build lost this swap's slot
          come home the moment the same swap is made again */
@@ -378,7 +381,7 @@ document.addEventListener("click", (ev) => {
       break;
     case "ax-save": {
       const sh = S.sheet;
-      const nm = (sh.name || "").trim();
+      const nm = canonName((sh.name || "").trim(), sh._cat);
       if (!nm) {
         alert("Give it a name first, or Cancel.");
         return;
@@ -900,10 +903,12 @@ document.addEventListener("input", (ev) => {
   }
   if (k === "ax-name" || k === "ax-sets" || k === "ax-reps") {
     S.sheet[k === "ax-name" ? "name" : k === "ax-sets" ? "sets" : "reps"] = el.value;
+    if (k === "ax-name") nameSuggestRefresh();
     return;
   }
   if (k === "swap-name") {
     S.sheet.name = el.value;
+    nameSuggestRefresh();
     return;
   }
   if (k === "pb-name" || k === "pb-w" || k === "pb-r") {

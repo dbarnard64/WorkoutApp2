@@ -42,11 +42,52 @@ function nnStem(t) {
   return t;
 }
 const nnFlat = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-const nn = (name) => {
+/* Build 2 of the key, frozen: only the name-key migration uses it, to find
+   which stored rows were filed under it. Never change this function. */
+const nnV2 = (name) => {
   const toks = [];
   const dir = [];
   String(name == null ? "" : name).toLowerCase().split(/[^a-z0-9]+/).forEach(function (t) {
     if (!t || NN_DROP[t]) return;
+    if (NN_DIR[t]) dir.push(t);
+    toks.push(nnStem(t));
+  });
+  if (!toks.length) return nnFlat(name);
+  toks.sort();
+  return toks.join("-") + (dir.length > 1 ? "~" + dir.join("") : "");
+};
+/* Build 3 also hears the ways a lift gets split or abbreviated: "Pull Down"
+   is "Pulldown", "1-Arm" is "Single-Arm", "RDL" is "Romanian Deadlift". */
+const NN_EXPAND = { rdl: "romanian deadlift", sldl: "stiff leg deadlift", ohp: "overhead press",
+  ohe: "overhead extension", sa: "single arm", legged: "leg" };
+const NN_JOIN = { pull: { down: 1, up: 1, over: 1, through: 1 }, push: { down: 1, up: 1 },
+  chin: { up: 1 }, sit: { up: 1 }, step: { up: 1 }, kick: { back: 1 }, cross: { over: 1 },
+  dead: { lift: 1 }, t: { bar: 1 }, v: { bar: 1 }, ez: { bar: 1 } };
+const NN_ONE = { one: 1, "1": 1 };
+const NN_LIMB = { arm: 1, leg: 1, hand: 1 };
+function nnWords(name) {
+  const raw = [];
+  String(name == null ? "" : name).toLowerCase().split(/[^a-z0-9]+/).forEach(function (t) {
+    if (!t) return;
+    if (NN_EXPAND[t]) NN_EXPAND[t].split(" ").forEach(function (x) { raw.push(x); });
+    else raw.push(t);
+  });
+  const out = [];
+  for (let i = 0; i < raw.length; i++) {
+    const t = raw[i];
+    const nx = raw[i + 1];
+    const base = nx && nx.length > 2 && nx.slice(-1) === "s" ? nx.slice(0, -1) : nx;
+    if (nx && NN_JOIN[t] && NN_JOIN[t][base]) { out.push(t + nx); i++; continue; }
+    if (nx && NN_ONE[t] && NN_LIMB[base]) { out.push("single"); continue; }
+    out.push(t);
+  }
+  return out;
+}
+const nn = (name) => {
+  const toks = [];
+  const dir = [];
+  nnWords(name).forEach(function (t) {
+    if (NN_DROP[t]) return;
     if (NN_DIR[t]) dir.push(t);
     toks.push(nnStem(t));
   });

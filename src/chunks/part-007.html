@@ -242,6 +242,137 @@ function knownNames() {
   return nameOf;
 }
 
+/* Every exercise the app has heard of, one row per key, for the name picker
+   on the swap and add sheets. Picking from it is what keeps one lift from
+   splitting into two spellings with two histories. */
+function exerciseCatalog() {
+  const nameOf = knownNames();
+  let best = {};
+  try { best = effectiveBests(); } catch (e) {}
+  const last = {};
+  Object.keys(S.log.weeks || {}).sort().forEach(function (wk) {
+    const w = S.log.weeks[wk];
+    Object.keys(w).forEach(function (k) {
+      const e = w[k];
+      const ln = logName(e);
+      if (ln && setIdx(e).some(function (i) { return e[i] && e[i].d; })) last[nn(ln)] = wk;
+    });
+  });
+  return Object.keys(nameOf).map(function (k) {
+    return { k: k, name: nameOf[k], best: best[k] || null, last: last[k] || "" };
+  });
+}
+function nameStems(s) {
+  return nnWords(s).filter(function (t) { return !NN_DROP[t]; }).map(nnStem);
+}
+/* every word typed must start a word of the name, or sit inside it */
+function nameHit(q, row) {
+  const tryWith = function (qt, words, flat) {
+    if (!qt.length) return 0;
+    let s = 0;
+    for (let i = 0; i < qt.length; i++) {
+      const t = qt[i];
+      if (words.some(function (w) { return w.indexOf(t) === 0; })) s += 3;
+      else if (flat.indexOf(t) >= 0) s += 1;
+      else return 0;
+    }
+    return s;
+  };
+  const flat = nnFlat(row.name);
+  const raw = tryWith(q.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean),
+    row.name.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean), flat);
+  const st = tryWith(nameStems(q), nameStems(row.name), nameStems(row.name).join(""));
+  return Math.max(raw, st);
+}
+/* a typo still finds its lift: letter pairs in common with the stretch of
+   the name the same length as what was typed, so a long name is no handicap */
+function nameLike(q, name) {
+  const qf = nnFlat(q), f = nnFlat(name);
+  if (f.length <= qf.length + 2) return nameDice(qf, f);
+  let best = 0;
+  for (let i = 0; i + qf.length - 1 <= f.length; i++)
+    for (let d = -1; d <= 1; d++) best = Math.max(best, nameDice(qf, f.substr(i, qf.length + d)));
+  return best;
+}
+function nameDice(a, b) {
+  const pairs = function (s) {
+    const f = nnFlat(s), o = {};
+    for (let i = 0; i < f.length - 1; i++) o[f.substr(i, 2)] = (o[f.substr(i, 2)] || 0) + 1;
+    return o;
+  };
+  const pa = pairs(a), pb = pairs(b);
+  let both = 0, na = 0, nb = 0;
+  Object.keys(pa).forEach(function (k) { na += pa[k]; if (pb[k]) both += Math.min(pa[k], pb[k]); });
+  Object.keys(pb).forEach(function (k) { nb += pb[k]; });
+  return na + nb ? (2 * both) / (na + nb) : 0;
+}
+function nameMatches(q, cat, skip) {
+  const pool = cat.filter(function (r) { return r.k !== skip; });
+  const qq = (q || "").trim();
+  const recent = function (a, b) { return a.last < b.last ? 1 : a.last > b.last ? -1 : a.name.localeCompare(b.name); };
+  if (!qq) return pool.filter(function (r) { return r.last; }).sort(recent).slice(0, 5);
+  const k = nn(qq);
+  const hits = pool
+    .map(function (r) { return { r: r, s: r.k === k ? 1000 : nameHit(qq, r) }; })
+    .filter(function (x) { return x.s > 0; })
+    .sort(function (a, b) { return b.s - a.s || recent(a.r, b.r); })
+    .map(function (x) { return x.r; });
+  if (!hits.length && nnFlat(qq).length >= 4) { /* only when nothing matched: a typo */
+    pool
+      .filter(function (r) { return hits.indexOf(r) < 0; })
+      .map(function (r) { return { r: r, s: nameLike(qq, r.name) }; })
+      .filter(function (x) { return x.s >= 0.6; })
+      .sort(function (a, b) { return b.s - a.s; })
+      .slice(0, 3)
+      .forEach(function (x) { hits.push(x.r); });
+  }
+  return hits.slice(0, 5);
+}
+/* the spelling already on file wins, so the list never grows a twin */
+function canonName(nm, cat) {
+  const k = nn(nm);
+  const r = (cat || exerciseCatalog()).find(function (x) { return x.k === k; });
+  return r ? r.name : nm;
+}
+function nameSuggestHtml(p) {
+  const cat = p._cat || (p._cat = exerciseCatalog());
+  const skip = p.orig ? nn(p.orig) : "";
+  const q = (p.name || "").trim();
+  const k = q ? nn(q) : "";
+  const hit = k ? cat.find(function (r) { return r.k === k; }) : null;
+  let status = "";
+  if (q && skip && k === skip)
+    status = "That&rsquo;s " + esc(p.orig) + " itself &mdash; saving puts it back.";
+  else if (hit)
+    status = '<span style="color:var(--brass)">&#10003;</span> Matches <b style="color:var(--chalk)">' +
+      esc(hit.name) + "</b> &mdash; same history and PBs.";
+  const rows = nameMatches(q, cat, skip);
+  if (!status && q)
+    status = rows.length
+      ? "Not on file as typed &mdash; pick one below, or save it as a new exercise."
+      : "New exercise &mdash; it starts its own history.";
+  const list = rows.length
+    ? '<div class="eyebrow" style="margin:14px 0 0">' + (q ? "Your exercises" : "Recent") + "</div>" +
+      '<div class="pblist">' +
+      rows.map(function (r) {
+        const bits = [];
+        if (r.best && r.best.w != null) bits.push("Best " + r.best.w + " " + U() + (r.best.r ? " \u00d7 " + r.best.r : ""));
+        if (r.last) bits.push(weekTag(r.last));
+        return '<button class="pbrow" style="width:100%;text-align:left;padding:8px 12px' +
+          (hit && r.k === hit.k ? ";box-shadow:inset 0 0 0 1px var(--brass)" : "") +
+          '" data-act="name-pick" data-n="' + esc(r.name) + '">' +
+          '<div class="grow"><div style="font-size:15px;font-weight:600">' + esc(r.name) + "</div>" +
+          (bits.length ? '<div class="tnum" style="color:var(--faint);font-size:12px">' + esc(bits.join(" · ")) + "</div>" : "") +
+          "</div></button>";
+      }).join("") + "</div>"
+    : "";
+  return (status ? '<div style="color:var(--mute);font-size:13px;line-height:1.5;margin-top:8px">' + status + "</div>" : "") + list;
+}
+function nameSuggestRefresh() {
+  const box = document.getElementById("nsug");
+  if (box && S.sheet) box.innerHTML = nameSuggestHtml(S.sheet);
+}
+
 function effectiveBests() {
   const derived = bestIndex(null);
   const man = manualPBs();

@@ -66,6 +66,28 @@ function dockTouch(d) {
       dockSync(true); /* plain tap: let the native click land, just settle the lens */
     }
   });
+  /* iOS cancels instead of ending when the system claims the gesture (the
+     home-bar swipe sits right under the dock); without this the lens froze
+     mid-drag with its glide switched off and the icons left magnified */
+  d.addEventListener("touchcancel", function () {
+    if (!dragging) return;
+    dragging = false;
+    lens.style.transition = "";
+    dockSync(true);
+  });
+  /* belt and braces: whatever happened while away, come back settled */
+  function settle() {
+    dragging = false;
+    lens.style.transition = "";
+    if (!d.classList.contains("hide")) dockSync(true);
+  }
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") settle();
+  });
+  window.addEventListener("pageshow", settle);
+  window.addEventListener("resize", function () {
+    if (!dragging && !d.classList.contains("hide")) dockSync(true); /* lens width follows the dock */
+  });
 }
 
 function vNavUnused() {

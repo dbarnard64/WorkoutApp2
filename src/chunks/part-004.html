@@ -132,7 +132,7 @@ function vCard(it, hist, pb) {
   let done = 0;
   for (let i = 0; i < total; i++) if (e[i] && e[i].d) done++;
   const complete = done === total;
-  const disp = it.extra ? it.name : shownName(it);
+  const disp = shownName(it);
   const swapped = disp !== it.name;
   const h = hist[nn(disp)] || [];
   const key = nn(disp);
@@ -245,6 +245,8 @@ function vCard(it, hist, pb) {
         total + (total === 1 ? " set" : " sets") + " ·&nbsp;added</div>" +
         '<button class="mv" data-act="sets-plus" data-key="' + it.key + '" data-name="' + esc(it.name) +
         '">+</button>' +
+        '<button class="ghost" style="flex:1;height:34px;margin:0" data-act="swap-open" data-key="' + it.key +
+        '" data-orig="' + esc(it.name) + '" data-extra="1">Swap</button>' +
         '<button class="ghost" style="flex:1;height:34px;margin:0" data-act="extra-remove" data-key="' +
         it.key + '">Remove</button></div>'
       : '<div class="row" style="gap:8px;margin-top:2px">' +
@@ -474,14 +476,19 @@ function vSwapSheet() {
   return sheetShell(
     "Just for today",
     "Swap exercise",
-    '<p style="color:var(--mute);font-size:13px;line-height:1.6;margin:0 0 12px">Type what you did instead. ' +
-      "This applies to this day only &mdash; the program is untouched and next week goes back to " +
-      esc(p.orig) + ". It keeps its own history and personal best.</p>" +
-      '<label class="fld"><input placeholder="' + esc(p.orig) + '" value="' + esc(p.name) +
-      '" data-in="swap-name"></label>' +
+    '<p style="color:var(--mute);font-size:13px;line-height:1.6;margin:0 0 12px">Pick what you did instead, or type a new one. ' +
+      (p.extra
+        ? "This changes today&rsquo;s entry only &mdash; " + esc(p.orig) + " itself is untouched. "
+        : "This applies to this day only &mdash; the program is untouched and next week goes back to " +
+          esc(p.orig) + ". ") +
+      "It keeps its own history and personal best.</p>" +
+      '<label class="fld"><input placeholder="Search or type a name" value="' + esc(p.name) +
+      '" data-in="swap-name" autocomplete="off" autocorrect="off" spellcheck="false"></label>' +
+      '<div id="nsug">' + nameSuggestHtml(p) + "</div>" +
       '<div class="row" style="gap:12px;margin-top:20px">' +
-      '<button class="btn-ghost" data-act="swap-revert">Use ' + esc(p.orig.split(" ").slice(0, 2).join(" ")) +
-      "</button>" +
+      (entryField(p.key, "alt")
+        ? '<button class="btn-ghost" data-act="swap-revert">Undo swap</button>'
+        : '<button class="btn-ghost" data-act="sheet-close">Cancel</button>') +
       '<button class="btn-primary" data-act="swap-save">Save</button></div>'
   );
 }
@@ -494,8 +501,9 @@ function vAddExSheet() {
     '<p style="color:var(--mute);font-size:13px;line-height:1.6;margin:0 0 12px">For extra work you did ' +
       "beyond the program. It counts toward today, keeps its own history and personal best, and next week " +
       "the day is back to the program.</p>" +
-      '<label class="fld"><input placeholder="Exercise name" value="' + esc(p.name || "") +
-      '" data-in="ax-name"></label>' +
+      '<label class="fld"><input placeholder="Search or type a name" value="' + esc(p.name || "") +
+      '" data-in="ax-name" autocomplete="off" autocorrect="off" spellcheck="false"></label>' +
+      '<div id="nsug">' + nameSuggestHtml(p) + "</div>" +
       '<div class="row" style="gap:12px;margin-top:12px">' +
       '<label class="fld" style="flex:1"><input inputmode="numeric" placeholder="3" value="' + esc(p.sets || "") +
       '" data-in="ax-sets"><em>sets</em></label>' +
