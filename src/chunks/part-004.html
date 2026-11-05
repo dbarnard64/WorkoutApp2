@@ -379,7 +379,7 @@ function inlineExercise(raw) {
   /* peel trailing parentheticals: reps-context ones become quals, week rules
      stay for the week parser, coaching cues ("2-sec squeeze") are dropped */
   for (let g = 0; g < 3; g++) {
-    const qm = line.match(/\s*\(([^)]{1,32})\)\s*$/);
+    const qm = line.match(/\s*\(([^)]{1,90})\)\s*$/);
     if (!qm) break;
     if (/week|odd|even/i.test(qm[1])) break;
     if (/each|per\b|side|arm|leg|total/i.test(qm[1])) qual = " " + qm[1].trim() + qual;
@@ -427,6 +427,15 @@ function inlineExercise(raw) {
   return null;
 }
 
+/* "Chest dominant — strength and size", "Strength and foundational development":
+   capital first word, later words in lower case - written as a description, not
+   as an exercise name ("Incline Dumbbell Press") */
+function sentenceCase(line) {
+  const w = String(line).split(/\s+/).filter(function (x) { return /^[A-Za-z]/.test(x); });
+  if (w.length < 2 || !/^[A-Z]/.test(w[0]) || /^[A-Z]{2,}$/.test(w[0])) return false;
+  const small = /^(and|or|of|to|the|a|an|with|for|on|in|at|per|vs)$/;
+  return w.slice(1).some(function (x) { return /^[a-z]/.test(x) && !small.test(x); });
+}
 function nextIsExercise(lines, k) {
   const a = lines[k + 1];
   if (!a) return false;

@@ -182,21 +182,32 @@
 });
 
 /* swipe the day card left/right to change day (past the ends of the week, to the next/previous week) */
-let swX = null, swY = null;
+/* iOS can cancel a touch instead of ending it once it decides the page might
+   scroll, and its end event can report where the finger started. So the finger
+   is followed as it moves, and a cancelled gesture is judged on its last point. */
+let swX = null, swY = null, swLX = 0, swLY = 0;
 document.addEventListener("touchstart", function (ev) {
   const h = ev.target && ev.target.closest ? ev.target.closest(".dayhead") : null;
-  if (!h || S.reorder || S.tab !== "train" || activeIsSingle()) { swX = null; return; }
+  if (!h || ev.touches.length > 1 || S.reorder || S.tab !== "train" || activeIsSingle()) { swX = null; return; }
   const t = ev.touches[0];
-  swX = t.clientX; swY = t.clientY;
+  swX = swLX = t.clientX; swY = swLY = t.clientY;
 }, { passive: true });
-document.addEventListener("touchend", function (ev) {
+document.addEventListener("touchmove", function (ev) {
+  if (swX === null || !ev.touches[0]) return;
+  swLX = ev.touches[0].clientX; swLY = ev.touches[0].clientY;
+}, { passive: true });
+function swipeEnd(ev) {
   if (swX === null) return;
-  const t = ev.changedTouches[0];
-  const dx = t.clientX - swX, dy = t.clientY - swY;
+  const t = ev.changedTouches && ev.changedTouches[0];
+  const x = t && t.clientX !== swX ? t.clientX : swLX;
+  const y = t && t.clientX !== swX ? t.clientY : swLY;
+  const dx = x - swX, dy = y - swY;
   swX = null;
-  if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+  if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
   swipeDay(dx < 0 ? 1 : -1);
-}, { passive: true });
+}
+document.addEventListener("touchend", swipeEnd, { passive: true });
+document.addEventListener("touchcancel", swipeEnd, { passive: true });
 function swipeDay(dir) {
   const n = document.querySelectorAll(".strip .pill").length || parsedProgram().days.length;
   let i = S.dayIdx + dir;

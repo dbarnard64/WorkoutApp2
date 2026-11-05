@@ -54,6 +54,17 @@ def fresh(browser, url, touch=False):
     return ctx, pg, errs
 
 
+# iOS sometimes cancels the touch, and its end event can carry the start point:
+# the move events are what tell the real distance
+SWIPE_IOS = """(a) => { const h = document.querySelector('.dayhead'); const r = h.getBoundingClientRect();
+  const x0 = r.left + r.width / 2, y0 = r.top + 40;
+  const mk = (x, y) => new Touch({identifier: 7, target: h, clientX: x, clientY: y});
+  h.dispatchEvent(new TouchEvent('touchstart', {touches: [mk(x0, y0)], changedTouches: [mk(x0, y0)], bubbles: true}));
+  for (let i = 1; i <= 5; i++) h.dispatchEvent(new TouchEvent('touchmove', {touches: [mk(x0 + a.dx * i / 5, y0 + a.dy * i / 5)], changedTouches: [mk(x0 + a.dx * i / 5, y0 + a.dy * i / 5)], bubbles: true}));
+  const end = a.cancel ? 'touchcancel' : 'touchend';
+  h.dispatchEvent(new TouchEvent(end, {touches: [], changedTouches: [mk(x0, y0)], bubbles: true})); }"""
+
+
 def css(pg, name):
     return pg.evaluate("getComputedStyle(document.documentElement).getPropertyValue('%s').trim()" % name).upper()
 
@@ -129,6 +140,12 @@ def swipe_checks(browser, url, c):
     for _ in range(5):
         pg.evaluate(SWIPE, -120); pg.wait_for_timeout(120)
     c.ok("MON" in eyebrow() and "NOV 9" in pg.locator(".wknav .lbl").inner_text().upper(), "swiping past Sunday rolls to next week")
+    pg.evaluate(SWIPE_IOS, {"dx": 110, "dy": 25, "cancel": True}); pg.wait_for_timeout(200)
+    c.ok("SUN" in eyebrow(), "a swipe iOS cancels mid-way still changes day")
+    pg.evaluate(SWIPE_IOS, {"dx": -110, "dy": 10, "cancel": False}); pg.wait_for_timeout(200)
+    c.ok("MON" in eyebrow(), "a swipe whose end reports the start point still changes day")
+    pg.evaluate(SWIPE_IOS, {"dx": -40, "dy": 90, "cancel": True}); pg.wait_for_timeout(200)
+    c.ok("MON" in eyebrow(), "a mostly vertical drag still does nothing")
     c.ok(errs == [], "no page errors while swiping")
     ctx.close()
 
@@ -249,13 +266,51 @@ def rest_day_checks(browser, url, c):
     ctx.close()
 
 
+PROGRAMME = """8-WEEK BODYBUILDING PROGRAMME
+
+Goal: Aesthetic physique, muscle size, strength and cardiovascular fitness
+Session duration: 75\u201390 minutes
+
+DAY 1 \u2014 CHEST & BACK A
+
+Chest dominant \u2014 strength and size
+
+Incline Dumbbell Press \u2014 4 \u00d7 6\u201310 (Rest: 2\u20133 min)
+Chest-Supported Row \u2014 4 \u00d7 6\u201310 (Rest: 2\u20133 min)
+
+DAY 3 \u2014 LEGS A
+
+Strength and foundational development
+
+Hack Squat \u2014 4 \u00d7 6\u201310 (Rest: 2\u20133 min)
+Seated Calf Raise \u2014 3 \u00d7 12\u201315 (Rest: 60\u201390 sec; only if heel is comfortable)
+
+DAY 7 \u2014 REST
+
+Full recovery. Prioritise sleep, nutrition and hydration.
+"""
+
+
+def parser_checks(browser, url, c):
+    ctx, pg, errs = fresh(browser, url)
+    r = pg.evaluate("""(t) => parseProgram(t).days.map(d => [d.title, !!d.rest,
+        d.items.filter(x => x.kind === 'ex').map(x => x.name + '|' + x.sets + '|' + x.reps),
+        d.items.filter(x => x.kind === 'note').map(x => x.text)])""", PROGRAMME)
+    c.ok(r[0][2] == ["Incline Dumbbell Press|4|6\u201310", "Chest-Supported Row|4|6\u201310"], "day description isn't read as a lift (%s)" % r[0][2])
+    c.ok(any("Chest dominant" in n for n in r[0][3]), "day description kept as a note")
+    c.ok("Seated Calf Raise|3|12\u201315" in r[1][2], "a long rest note in brackets doesn't hide the lift (%s)" % r[1][2])
+    c.ok(r[2][1] is True and r[2][2] == [], "a day headed REST is a rest day")
+    c.ok(errs == [], "no page errors in the parser checks")
+    ctx.close()
+
+
 def run(url):
     from playwright.sync_api import sync_playwright
 
     c = Checks()
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
-        for fn in (train_checks, swipe_checks, pb_moment_checks, remove_and_grab_checks, rest_day_checks, library_and_theme_checks):
+        for fn in (train_checks, swipe_checks, pb_moment_checks, remove_and_grab_checks, rest_day_checks, parser_checks, library_and_theme_checks):
             try:
                 fn(browser, url, c)
             except Exception as e:  # a crashed check is a failed check

@@ -251,6 +251,16 @@ function parseProgram(text) {
     }
 
     if (
+      !day.items.some(function (x) { return x.kind === "ex"; }) &&
+      !/\d/.test(line) &&
+      sentenceCase(line) &&
+      nextIsExercise(lines, k)
+    ) {
+      day.items.push({ kind: "note", text: line });
+      continue;
+    }
+
+    if (
       (/:$/.test(line) && words(line) <= 6) ||
       SECTION_RE.test(line) ||
       (words(line) <= 2 &&
@@ -288,6 +298,12 @@ function parseProgram(text) {
 
     day.items.push({ kind: "ex", name: line, sets: rounds, reps: "" });
   }
+
+  days.forEach(function (d) {
+    if (/^(rest|rest day|recovery|off|day off)$/i.test(String(d.title || "").trim()) &&
+        !d.items.some(function (x) { return x.kind === "ex"; }))
+      d.rest = true;
+  });
 
   let maxWeek = 0;
   days.forEach((d, di) => {
