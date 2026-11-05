@@ -223,6 +223,12 @@ document.addEventListener("click", (ev) => {
       S.openEx = null;
       S.reorder = false;
       break;
+    case "day-go":
+      S.weekOff += +el.dataset.w || 0;
+      S.dayIdx = +el.dataset.i;
+      S.openEx = null;
+      S.reorder = false;
+      break;
     case "expand":
       S.openEx = S.openEx === el.dataset.key ? null : el.dataset.key;
       break;
@@ -485,6 +491,18 @@ document.addEventListener("click", (ev) => {
       S.sheet = null;
       break;
     }
+    case "ex-remove": {
+      const k = el.dataset.key;
+      const e2 = (S.log.weeks[wkNow()] || {})[k];
+      if (e2 && anyTicked(e2) && !confirm("Remove this exercise and its logged sets for today?")) return;
+      if (e2) setIdx(e2).forEach(function (i) { delete e2[i]; });
+      if (S.openEx === k) S.openEx = null;
+      writeEntry(k, "rm", todayISO(), el.dataset.name);
+      break;
+    }
+    case "ex-restore":
+      writeEntry(el.dataset.key, "rm", null, el.dataset.name);
+      break;
     case "extra-remove": {
       const k = el.dataset.key;
       const e2 = (S.log.weeks[wkNow()] || {})[k];

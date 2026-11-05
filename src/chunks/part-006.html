@@ -230,14 +230,18 @@ const boot = loadState();
 if (boot && boot.programs && boot.programs.length) {
   S.programs = boot.programs;
   S.activeId = boot.activeId || boot.programs[0].id;
-  S.log = {
+  /* every saved field comes back, not just the ones listed: a field missing
+     here used to be dropped on reload (the grab-and-go "resume your program"
+     state, S.log.wo, disappeared that way) */
+  S.log = Object.assign({}, boot.log || {}, {
     weeks: (boot.log && boot.log.weeks) || {},
     settings: (boot.log && boot.log.settings) || {},
     sessions: (boot.log && boot.log.sessions) || {},
     body: (boot.log && boot.log.body) || {},
     pbs: (boot.log && boot.log.pbs) || {},
     cats: (boot.log && boot.log.cats) || {},
-  };
+    ggRun: (boot.log && boot.log.ggRun) || {},
+  });
 } else {
   S.programs = [
     { id: "p" + Date.now(), raw: SEED, title: parseProgram(SEED).title, start: "2026-07-06" },
@@ -382,6 +386,7 @@ function dayProgress(day) {
     done = 0;
   liveDayItems(day).concat(dayExtras(dayIndexOf(day))).forEach((it) => {
     if (it.kind !== "ex") return;
+    if (dropped(it)) return;
     const e = entriesFor(it.key);
     if (!itemActive(it, eff) && !anyTicked(e)) return;
     const n = setsFor(it);
@@ -393,18 +398,36 @@ function dayProgress(day) {
 /* the first lift after a "Finish with" / "Finisher" heading, if the day has one */
 /* the hero's main button: open the first unfinished lift at its next set */
 /* rest-day hero: the next programmed day this week, tappable */
+/* rest-day hero: the next programmed day - later this week, or the start of
+   next week when the rest day is the last slot - labelled with its real date */
 function nextSessionHtml(dp, day) {
-  const idx = dp.days.indexOf(day);
-  for (let j = idx + 1; j < dp.days.length; j++) {
-    const d = dp.days[j];
-    if (d.rest || !d.items.some(function (x) { return x.kind === "ex"; })) continue;
-    const lp = liftProgress(d);
-    return '<button class="nextses" data-act="day" data-i="' + j + '"><span class="grow"><small>NEXT \u00b7 ' +
-      esc(String(d.name).slice(0, 3).toUpperCase()) + "</small><b>" + esc(d.title || d.name) + "</b><span>" +
-      plu(lp.total, "lift") + " \u00b7 " + plu(dayProgress(d).total, "set") + "</span></span>" +
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg></button>';
+  const slots = dp.days.length + restSlotCount(dp);
+  const idx = dayIndexOf(day);
+  const hasLifts = function (d) {
+    return d && !d.rest && d.items.some(function (x) { return x.kind === "ex"; });
+  };
+  let j = -1, w = 0;
+  for (let k = idx + 1; k < slots; k++) if (hasLifts(dayAt(dp, k))) { j = k; break; }
+  if (j < 0) for (let k = 0; k < slots; k++) if (hasLifts(dayAt(dp, k))) { j = k; w = 1; break; }
+  if (j < 0) return "";
+  const d = dayAt(dp, j);
+  const wd = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"].indexOf(String(d.name || "").toLowerCase());
+  let when = null;
+  if (progAnchorISO()) {
+    when = anchorOf(S.weekOff + w);
+    when.setDate(when.getDate() + j);
+  } else if (wd >= 0) {
+    when = mondayOf(S.weekOff + w);
+    when.setDate(when.getDate() + wd);
   }
-  return "";
+  const label = when
+    ? when.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })
+    : (w ? "next week \u00b7 " : "") + (d.name || "");
+  const lp = liftProgress(d);
+  return '<button class="nextses" data-act="day-go" data-i="' + j + '" data-w="' + w + '"><span class="grow"><small>NEXT \u00b7 ' +
+    esc(label.toUpperCase()) + "</small><b>" + esc(d.title || d.name) + "</b><span>" +
+    plu(lp.total, "lift") + " \u00b7 " + plu(dayProgress(d).total, "set") + "</span></span>" +
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg></button>';
 }
 function upNextHtml(day) {
   const eff = effWeek();
@@ -453,6 +476,7 @@ function liftProgress(day) {
     done = 0;
   liveDayItems(day).concat(dayExtras(dayIndexOf(day))).forEach((it) => {
     if (it.kind !== "ex") return;
+    if (dropped(it)) return;
     const e = entriesFor(it.key);
     if (!itemActive(it, eff) && !anyTicked(e)) return;
     const n = setsFor(it);
@@ -468,9 +492,11 @@ function historyIndex() {
   const map = {};
   const cur = wkNow();
   Object.keys(S.log.weeks || {}).forEach((week) => {
-    if (week >= cur) return;
     const w = S.log.weeks[week];
     Object.keys(w).forEach((k) => {
+      /* this week only counts through an earlier grab-and-go run already filed away */
+      const run = runOf(k);
+      if (week >= cur && !run) return;
       const e = w[k];
       if (!e || !logName(e)) return;
       const sets = setIdx(e)
@@ -478,10 +504,12 @@ function historyIndex() {
         .filter((s) => s && s.d && (s.w || s.r) && !repsBad(s));
       if (!sets.length) return;
       const key = nn(logName(e));
-      (map[key] = map[key] || []).push({ week, sets });
+      (map[key] = map[key] || []).push({ week, sets, run });
     });
   });
-  Object.keys(map).forEach((k) => map[k].sort((a, b) => (a.week < b.week ? 1 : -1)));
+  Object.keys(map).forEach((k) =>
+    map[k].sort((a, b) => (a.week !== b.week ? (a.week < b.week ? 1 : -1) : a.run < b.run ? 1 : a.run > b.run ? -1 : 0))
+  );
   return map;
 }
 
@@ -527,7 +555,7 @@ function repairKeys(dp, pid) {
     const out = {};
     /* everything not ours, and anything already parked, passes straight through */
     Object.keys(w).forEach(function (k) {
-      if (k.indexOf(pid + ":") !== 0 || k.indexOf(":x:") >= 0) out[k] = w[k];
+      if (k.indexOf(pid + ":") !== 0 || k.indexOf(":x:") >= 0 || runOf(k)) out[k] = w[k];
       else mine.push(k);
     });
     if (!mine.length) return;

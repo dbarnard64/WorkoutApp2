@@ -66,13 +66,14 @@ function vSessSheet() {
   const rec = (S.log.sessions[wk] || {})[k] || {};
   const m = k.match(/^(.+):(d\d+)$/);
   const pid = m ? m[1] : "", di = m ? m[2] : "";
-  const p = S.programs.find(function (x) { return x.id === pid; });
+  const pid0 = pid.replace(/:run\d{8}$/, "");
+  const p = S.programs.find(function (x) { return x.id === pid0; });
   const dp = p ? parseProgram(p.raw) : null;
   const dday = dp ? dp.days[+di.slice(1)] : null;
   /* every logged exercise of that day, planned or added on the day */
   const rx = new RegExp("^" + pid.replace(/[.*+?^$()|[\]\\{}]/g, "\\$&") + ":" + di + "(e|a)(\\d+)$");
   const wkData = S.log.weeks[wk] || {};
-  const exKeys = Object.keys(wkData).filter(function (x) { return rx.test(x); })
+  const exKeys = Object.keys(wkData).filter(function (x) { return rx.test(x) && !(wkData[x] && wkData[x].rm); })
     .sort(function (x, y) {
       const a2 = x.match(rx), b2 = y.match(rx);
       return a2[1] === b2[1] ? +a2[2] - +b2[2] : a2[1] === "e" ? -1 : 1;
@@ -211,7 +212,58 @@ function focusRestore(f) {
   } catch (e) {}
 }
 
+/* A grab-and-go workout can be done more than once in a week, but its slots live
+   in that week's log. Opening it on a later day than the run already sitting in
+   those slots files that run under a dated key ({pid}:runYYYYMMDD:d0e0), and its
+   session record with it, so today starts clean. History, bests, tonnage and the
+   calendar still read the earlier run; nothing is deleted. */
+function rollGrabAndGo() {
+  if (S.weekOff !== 0 || !activeIsSingle()) return false;
+  const p = activeProgram();
+  if (!p) return false;
+  const today = todayISO();
+  S.log.ggRun = S.log.ggRun || {};
+  let last = S.log.ggRun[p.id];
+  if (last === today) return false;
+  const wk = wkNow();
+  const w = S.log.weeks[wk] || {};
+  const ss = S.log.sessions[wk] || {};
+  const pre = p.id + ":d";
+  /* parked sets go too, or a later swap back would pull them into today */
+  const live = Object.keys(w).filter(function (k) {
+    return k.indexOf(pre) === 0 || k.indexOf(p.id + ":x:") === 0;
+  });
+  const liveS = Object.keys(ss).filter(function (k) { return k.indexOf(pre) === 0; });
+  if (!last) {
+    /* logs from before run dates were kept: a session record says when they were
+       done; with nothing to go on, treat them as today's */
+    liveS.forEach(function (k) {
+      const d = ss[k] && ss[k].d;
+      if (d && d < today && (!last || d > last)) last = d;
+    });
+  }
+  S.log.ggRun[p.id] = today;
+  if (last && last < today && last >= wk && (live.length || liveS.length)) {
+    const tag = p.id + ":run" + last.replace(/-/g, "") + ":";
+    live.forEach(function (k) {
+      w[tag + k.slice(p.id.length + 1)] = w[k];
+      delete w[k];
+    });
+    liveS.forEach(function (k) {
+      ss[tag + k.slice(p.id.length + 1)] = ss[k];
+      delete ss[k];
+    });
+    if (S.openEx && S.openEx.indexOf(pre) === 0) S.openEx = null;
+  }
+  return true;
+}
+function runOf(k) {
+  const m = k.match(/:run(\d{8}):/);
+  return m ? m[1] : "";
+}
+
 function render() {
+  if (rollGrabAndGo()) persist();
   const f = focusSnapshot();
   renderInner();
   focusRestore(f);
@@ -522,9 +574,10 @@ function restoreBackup(text) {
   if (!confirm("Replace everything currently in the app with this backup?")) return false;
   S.programs = d.programs;
   S.activeId = d.activeId || d.programs[0].id;
-  S.log = { weeks: (d.log && d.log.weeks) || {}, settings: (d.log && d.log.settings) || {},
+  S.log = Object.assign({}, d.log || {}, { weeks: (d.log && d.log.weeks) || {}, settings: (d.log && d.log.settings) || {},
     sessions: (d.log && d.log.sessions) || {}, body: (d.log && d.log.body) || {},
-    pbs: (d.log && d.log.pbs) || {}, cats: (d.log && d.log.cats) || {} };
+    pbs: (d.log && d.log.pbs) || {}, cats: (d.log && d.log.cats) || {},
+    ggRun: (d.log && d.log.ggRun) || {} });
   cacheRaw = null;
   S.sheet = null;
   S.tab = "train";
@@ -542,9 +595,9 @@ function restoreBackup(text) {
 function bestIndex(beforeWeek) {
   const map = {};
   Object.keys(S.log.weeks || {}).forEach((week) => {
-    if (beforeWeek && week >= beforeWeek) return;
     const w = S.log.weeks[week];
     Object.keys(w).forEach((k) => {
+      if (beforeWeek && week >= beforeWeek && !runOf(k)) return;
       const e = w[k];
       if (!e || !logName(e)) return;
       setIdx(e).forEach((i) => {
@@ -567,9 +620,9 @@ function bestIndex(beforeWeek) {
 function recordIndex(beforeWeek) {
   const map = {};
   Object.keys(S.log.weeks || {}).forEach((week) => {
-    if (beforeWeek && week >= beforeWeek) return;
     const w = S.log.weeks[week];
     Object.keys(w).forEach((k) => {
+      if (beforeWeek && week >= beforeWeek && !runOf(k)) return;
       const e = w[k];
       if (!e || !logName(e)) return;
       const key = nn(logName(e));

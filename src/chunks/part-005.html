@@ -573,6 +573,17 @@ function weekSets(key) {
   const n = parseInt(v, 10);
   return v != null && !isNaN(n) && n > 0 ? n : null;
 }
+/* Remove on a program exercise drops it for that day only. The flag rides on
+   the week's log entry like a swap and holds the date it was removed, so the
+   program and every other week keep the exercise. A program day comes round
+   once a week, so the flag alone settles it; a grab-and-go workout can be done
+   twice in one week, so there it only counts on the day it was set. */
+function dropped(it) {
+  if (!it || it.extra) return false;
+  const v = entryField(it.key, "rm");
+  if (!v) return false;
+  return activeIsSingle() ? v === todayISO() : true;
+}
 function shownName(it) {
   const a = entryField(it.key, "alt");
   return a && String(a).trim() ? String(a).trim() : it.name;
@@ -685,6 +696,7 @@ function summarize(day, entriesFor, eff) {
   const lines = [];
   liveDayItems(day).concat(dayExtras(dayIndexOf(day))).forEach((it) => {
     if (it.kind !== "ex") return;
+    if (dropped(it)) return;
     if (!itemActive(it, eff) && !anyTicked(entriesFor(it.key))) return;
     exTotal++;
     const n = setsFor(it);

@@ -400,7 +400,7 @@ function sessionHistory(cap) {
       const rec = S.log.sessions[wk][k];
       if (!rec || !rec.at) return;
       const m = k.match(/^(.+):(d\d+)$/);
-      const pid = m ? m[1] : "";
+      const pid = m ? m[1].replace(/:run\d{8}$/, "") : "";
       const p = S.programs.find(function (x) { return x.id === pid; });
       let pn = rec.pn, dn = rec.dn, gg = rec.gg;
       if (pn == null) {

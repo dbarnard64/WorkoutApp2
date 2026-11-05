@@ -63,11 +63,11 @@ function vStrip(dp) {
   const dotCls = function (pr, sid) {
     return sessionFor(sid) || (pr.total && pr.done === pr.total) ? " done" : pr.done ? " part" : "";
   };
-  const face = function (label, num, pr, sid) {
+  const face = function (label, num, pr, sid, hasLifts) {
     return (num == null
       ? '<span class="pnum">' + esc(label) + "</span>"
       : '<span class="pwd">' + esc(label) + '</span><span class="pnum tnum">' + num + "</span>") +
-      '<span class="pcnt tnum">' + (pr.total ? pr.done + "/" + pr.total : "rest") + "</span>";
+      '<span class="pcnt tnum">' + (pr.total ? pr.done + "/" + pr.total : hasLifts ? "0/0" : "rest") + "</span>";
   };
   return (
     '<div class="wkbar"><div class="wrap">' + wkNavHtml() + "</div></div>" +
@@ -92,7 +92,7 @@ function vStrip(dp) {
             }
             const dn = nm.match(/^day\s*(\d+)/i);
             return dn ? "D" + dn[1] : nm.slice(0, 3);
-          })(d.name), dnum(i, d.name), pr, d.id) +
+          })(d.name), dnum(i, d.name), pr, d.id, !d.rest && d.items.some(function (x) { return x.kind === "ex"; })) +
           "</button>"
         );
       })
@@ -296,7 +296,9 @@ function vCard(it, hist, pb) {
       '<button class="mv" data-act="sets-plus" data-key="' + it.key + '" data-name="' + esc(it.name) +
       '">+</button>' +
       '<button class="ghost" style="flex:1;height:34px;margin:0" data-act="swap-open" data-key="' + it.key +
-      '" data-orig="' + esc(it.name) + '">Swap exercise</button>' +
+      '" data-orig="' + esc(it.name) + '">Swap</button>' +
+      '<button class="ghost" style="flex:1;height:34px;margin:0" data-act="ex-remove" data-key="' +
+      it.key + '" data-name="' + esc(it.name) + '">Remove</button>' +
       (adj != null || swapped
         ? '<button class="mv" data-act="day-reset" data-key="' + it.key + '" data-name="' + esc(it.name) +
           '" title="Back to the program">&#8635;</button>'
@@ -461,10 +463,24 @@ function vTrain(dp) {
           if (it.kind === "sec")
             return '<div class="sec"><div class="eyebrow on">' + esc(it.label) + "</div></div>";
           if (it.kind === "note") return '<div class="note">' + esc(it.text) + "</div>";
+          if (dropped(it)) return "";
           return vCard(it, hist, pb);
         })
         .join("") ||
-      '<div style="color:var(--faint);font-size:14px">Rest day &mdash; nothing logged here.</div>';
+      (items.some((x) => x.kind === "ex") || restView
+        ? ""
+        : '<div style="color:var(--faint);font-size:14px">Rest day &mdash; nothing logged here.</div>');
+    const gone = swapd ? [] : items.filter((x) => x.kind === "ex" && dropped(x));
+    if (gone.length)
+      body +=
+        '<div class="removed"><div class="eyebrow">Removed today</div>' +
+        gone
+          .map(function (it) {
+            return '<div class="rmrow"><span class="grow">' + esc(shownName(it)) + "</span>" +
+              '<button class="rmback" data-act="ex-restore" data-key="' + it.key + '" data-name="' + esc(it.name) +
+              '">Put back</button></div>';
+          })
+          .join("") + "</div>";
     const extras = dayExtras(dayIndexOf(day));
     body += extras.map(function (it) { return vCard(it, hist, pb); }).join("");
     body +=

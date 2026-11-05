@@ -199,13 +199,63 @@ def pb_moment_checks(browser, url, c):
     ctx.close()
 
 
+def remove_and_grab_checks(browser, url, c):
+    # Remove for today on a program lift, then Put back
+    ctx, pg, errs = fresh(browser, url)
+    k = pg.evaluate("currentDay().items.filter(x => x.kind === 'ex')[1].key")
+    pg.evaluate("S.openEx = %s; render()" % json.dumps(k))
+    pg.locator('[data-act=ex-remove][data-key="%s"]' % k).click(); pg.wait_for_timeout(150)
+    c.ok(pg.locator('.card-top[data-key="%s"]' % k).count() == 0, "Remove hides the lift for today")
+    c.ok(pg.locator('[data-act=ex-restore][data-key="%s"]' % k).count() == 1, "Removed today list offers Put back")
+    pg.locator('[data-act=ex-restore][data-key="%s"]' % k).click(); pg.wait_for_timeout(150)
+    c.ok(pg.locator('.card-top[data-key="%s"]' % k).count() == 1, "Put back restores the lift")
+    c.ok(errs == [], "no page errors around Remove")
+    ctx.close()
+    # A grab-and-go done Monday and opened again Wednesday starts clean,
+    # with Monday filed under its own run and still in history
+    ctx, pg, errs = fresh(browser, url)
+    pg.evaluate("""(() => { localStorage.setItem(KEY, JSON.stringify({
+      programs: [{ id: 'pG', title: 'Back Pump', raw: 'Back Pump\\nPull Day\\nLat Pulldown - 3x10\\nCable Row - 3x12' }],
+      activeId: 'pG',
+      log: { weeks: { '2026-11-02': { 'pG:d0e0': { 0: { d: true, w: '70', r: '10' }, n: 'Lat Pulldown' } } },
+             sessions: { '2026-11-02': { 'pG:d0': { at: '2026-11-02T18:00:00Z', d: '2026-11-02', sets: 1, volume: 700,
+                                                     pn: 'Back Pump', dn: '', gg: 1 } } },
+             ggRun: { pG: '2026-11-02' }, settings: { autoRest: false } } })); })()""")
+    pg.goto(url, wait_until="load"); pg.wait_for_timeout(900)
+    c.ok(pg.evaluate("dayProgress(currentDay()).done") == 0, "repeat grab-and-go starts clean on a new day")
+    keys = pg.evaluate("Object.keys(S.log.sessions['2026-11-02'] || {})")
+    c.ok(any(":run20261102:" in x for x in keys), "earlier grab-and-go session filed under its own day")
+    c.ok(pg.evaluate("(historyIndex()[nn('Lat Pulldown')] || []).length") == 1, "earlier run still counts as history")
+    c.ok(errs == [], "no page errors around grab-and-go runs")
+    ctx.close()
+
+
+def rest_day_checks(browser, url, c):
+    # a numbered program anchored on a Saturday has a rest slot on Friday;
+    # its next session is next week's Day 1
+    ctx, pg, errs = fresh(browser, url)
+    pg.evaluate("""(() => { localStorage.setItem(KEY, JSON.stringify({
+      programs: [{ id: 'pS', title: 'Six', start: '2026-10-24',
+        raw: 'Six\\nDay 1 - Chest\\nBench - 4x8\\nDay 2 - Back\\nRow - 4x8\\nDay 3 - Legs\\nSquat - 4x6\\nDay 4 - Arms\\nCurl - 3x12\\nDay 5 - Shoulders\\nPress - 4x8\\nDay 6 - Full\\nDeadlift - 3x5' }],
+      activeId: 'pS', log: { weeks: {}, sessions: {}, settings: { autoRest: false } } })); })()""")
+    pg.goto(url, wait_until="load"); pg.wait_for_timeout(900)
+    pg.locator(".pill").nth(6).click(); pg.wait_for_timeout(200)
+    c.ok(pg.locator(".dayhead h1").inner_text().upper() == "REST", "rest slot shows the REST card")
+    c.ok("rest day" not in pg.locator(".list").inner_text().lower(), "no duplicate rest-day line under the card")
+    c.ok(pg.locator(".nextses b").inner_text().upper() == "CHEST", "next session is next week's first day")
+    pg.click(".nextses"); pg.wait_for_timeout(200)
+    c.ok(pg.evaluate("S.weekOff") == 1 and pg.locator(".dayhead h1").inner_text().upper() == "CHEST", "next-session strip opens it")
+    c.ok(errs == [], "no page errors on rest days")
+    ctx.close()
+
+
 def run(url):
     from playwright.sync_api import sync_playwright
 
     c = Checks()
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
-        for fn in (train_checks, swipe_checks, pb_moment_checks, library_and_theme_checks):
+        for fn in (train_checks, swipe_checks, pb_moment_checks, remove_and_grab_checks, rest_day_checks, library_and_theme_checks):
             try:
                 fn(browser, url, c)
             except Exception as e:  # a crashed check is a failed check
