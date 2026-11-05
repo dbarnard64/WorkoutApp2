@@ -1,928 +1,484 @@
-    '<div class="mid">' +
-    '<div class="block"><label class="fld"><input placeholder="Program name" value="' + esc(b.title) +
-    '" data-in="b-title"></label>' +
-    '<div class="row" style="gap:8px;margin-top:12px">' +
-    '<div class="grow"><div class="eyebrow">Week 1 starts</div>' +
-    '<input type="date" class="datefld tnum" style="margin-top:6px;width:100%" value="' + esc(b.start) +
-    '" data-in="b-start"></div>' +
-    '<div style="width:100px"><div class="eyebrow">Weeks</div>' +
-    '<label class="fld" style="margin-top:6px"><input class="tnum" inputmode="numeric" value="' +
-    esc(b.weeks) + '" data-in="b-weeks"></label></div></div></div>' +
+      ? '<div class="warn" style="margin-top:10px">Deload week &mdash; working sets cut by half. ' +
+        "Keep the load moderate and the form clean.</div>"
+      : "") +
 
-    days +
-    '<button class="dash" style="margin-top:12px" data-act="b-add-day">+ Add day</button>' +
-
-    (b.days.length
-      ? '<button class="link" style="display:block;margin-top:18px" data-act="b-preview">' +
-        (b.preview ? "Hide the text" : "Show the text this makes") + "</button>" +
-        (b.preview
-          ? '<pre style="white-space:pre-wrap;background:var(--ink);border:1px solid var(--line);' +
-            'border-radius:12px;padding:12px;font-size:12px;color:var(--mute);margin-top:8px">' +
-            esc(buildText(b)) + "</pre>"
-          : "")
+    (S.dayMenu
+      ? '<div class="dmenu">' +
+        (dp.info.length ? '<button data-act="notes-open">&#9432;&nbsp; Program notes</button>' : "") +
+        '<button data-act="reorder-on">&#8645;&nbsp; Reorder lifts</button>' +
+        '<button class="danger" data-act="clear-day">&#8635;&nbsp; Clear this day</button></div>'
       : "") +
     "</div>" +
-
-    '<div class="foot"><button class="btn-ghost" data-act="b-cancel">Cancel</button>' +
-    '<button class="btn-primary" data-act="b-save"' + (buildValid(b) ? "" : " disabled") +
-    ">Save program</button></div></div></div>"
+    '<div class="list">' + body + "</div></div>"
   );
 }
 
-/* ===== clipboard (works on file:// too) ===== */
-function copyText(str, btn) {
-  const done = () => {
-    if (btn) {
-      const old = btn.textContent;
-      btn.textContent = "Copied";
-      setTimeout(() => {
-        btn.textContent = old;
-      }, 1600);
-    }
-  };
-  if (navigator.clipboard && window.isSecureContext) {
-    navigator.clipboard.writeText(str).then(done, () => fallback(str, done));
-  } else fallback(str, done);
-}
-function fallback(str, done) {
-  const ta = document.createElement("textarea");
-  ta.value = str;
-  ta.style.position = "fixed";
-  ta.style.opacity = "0";
-  document.body.appendChild(ta);
-  ta.select();
-  ta.setSelectionRange(0, str.length);
-  try {
-    document.execCommand("copy");
-    done();
-  } catch (e) {}
-  document.body.removeChild(ta);
+function vSwapSheet() {
+  const p = S.sheet;
+  return sheetShell(
+    "Just for today",
+    "Swap exercise",
+    '<p style="color:var(--mute);font-size:13px;line-height:1.6;margin:0 0 12px">Pick what you did instead, or type a new one. ' +
+      (p.extra
+        ? "This changes today&rsquo;s entry only &mdash; " + esc(p.orig) + " itself is untouched. "
+        : "This applies to this day only &mdash; the program is untouched and next week goes back to " +
+          esc(p.orig) + ". ") +
+      "It keeps its own history and personal best.</p>" +
+      '<label class="fld"><input placeholder="Search or type a name" value="' + esc(p.name) +
+      '" data-in="swap-name" autocomplete="off" autocorrect="off" spellcheck="false"></label>' +
+      '<div id="nsug">' + nameSuggestHtml(p) + "</div>" +
+      '<div class="row" style="gap:12px;margin-top:20px">' +
+      (entryField(p.key, "alt")
+        ? '<button class="btn-ghost" data-act="swap-revert">Undo swap</button>'
+        : '<button class="btn-ghost" data-act="sheet-close">Cancel</button>') +
+      '<button class="btn-primary" data-act="swap-save">Save</button></div>'
+  );
 }
 
-/* a set with both a weight and reps in it is a set you did */
-let tickTimer = null;
-/* A drop set is one unit of work: until every child has weight and reps,
-   the whole set stays out of the totals and off the auto-tick. */
-function dropsComplete(s2) {
-  return (s2.dr || []).every(function (d2) {
-    return (
-      String(d2.w == null ? "" : d2.w).trim() !== "" &&
-      String(d2.r == null ? "" : d2.r).trim() !== "" &&
-      !isNaN(numOf(d2.w)) &&
-      !isNaN(numOf(d2.r))
-    );
-  });
+function vAddExSheet() {
+  const p = S.sheet;
+  return sheetShell(
+    "Just for today",
+    "Add an exercise",
+    '<p style="color:var(--mute);font-size:13px;line-height:1.6;margin:0 0 12px">For extra work you did ' +
+      "beyond the program. It counts toward today, keeps its own history and personal best, and next week " +
+      "the day is back to the program.</p>" +
+      '<label class="fld"><input placeholder="Search or type a name" value="' + esc(p.name || "") +
+      '" data-in="ax-name" autocomplete="off" autocorrect="off" spellcheck="false"></label>' +
+      '<div id="nsug">' + nameSuggestHtml(p) + "</div>" +
+      '<div class="row" style="gap:12px;margin-top:12px">' +
+      '<label class="fld" style="flex:1"><input inputmode="numeric" placeholder="3" value="' + esc(p.sets || "") +
+      '" data-in="ax-sets"><em>sets</em></label>' +
+      '<label class="fld" style="flex:1"><input placeholder="e.g. 10-12" value="' + esc(p.reps || "") +
+      '" data-in="ax-reps"><em>reps</em></label></div>' +
+      '<div class="row" style="gap:12px;margin-top:20px">' +
+      '<button class="btn-ghost" data-act="sheet-close">Cancel</button>' +
+      '<button class="btn-primary" data-act="ax-save">Add it</button></div>'
+  );
 }
 
-function autoTick(key, i, name) {
-  if (!settings().autoTick) return;
-  const wk = wkNow();
-  const ex = S.log.weeks[wk] && S.log.weeks[wk][key];
-  if (!ex) return;
-  const s2 = ex[i];
-  if (!s2 || s2.d) return;
-  const hasW = String(s2.w == null ? "" : s2.w).trim() !== "";
-  const hasR = String(s2.r == null ? "" : s2.r).trim() !== "";
-  if (!hasW || !hasR) return;
-  if (repsBad(s2)) return;
-  if (!dropsComplete(s2)) return;
-  s2.d = true;
-  if (name) ex.n = name;
-  persist();
-  if (settings().autoRest) startRest(settings().restSec);
-  render();
-  return true;
+function vDaySwapSheet() {
+  const p = S.sheet;
+  const singles = S.programs.filter(isSingle);
+  const list = singles.length
+    ? '<div class="pblist">' +
+      singles.map(function (g) {
+        const gdp = applyFixes(parseProgram(g.raw), g.fixes);
+        const n = gdp.days[0].items.filter(function (x) { return x.kind === "ex"; }).length;
+        return (
+          '<button class="pbrow" style="width:100%;text-align:left" data-act="dayswap-pick" data-pid="' +
+          g.id + '">' +
+          '<div class="grow"><div style="font-size:15px;font-weight:600">' +
+          esc(g.title || gdp.title || "Workout") + "</div>" +
+          '<div style="color:var(--faint);font-size:12px">' + n +
+          (n === 1 ? " exercise" : " exercises") + "</div></div>" +
+          '<span style="color:var(--brass);font-size:13px">Use &rsaquo;</span></button>'
+        );
+      }).join("") + "</div>"
+    : '<p style="color:var(--faint);font-size:14px;line-height:1.6">No grab-and-go workouts yet. ' +
+      "Add one on the Programs tab &mdash; a single workout, no week structure &mdash; and it will be listed here.</p>";
+  return sheetShell(
+    "Just for this week",
+    "Swap the whole day",
+    '<p style="color:var(--mute);font-size:13px;line-height:1.6;margin:0 0 12px">Trade ' +
+      esc(p.orig) + " for one of your grab-and-go workouts. Logging it still completes this " +
+      "program day, and the program is back next week.</p>" + list +
+      '<div class="row" style="gap:12px;margin-top:20px">' +
+      '<button class="btn-ghost" data-act="sheet-close">Cancel</button></div>'
+  );
 }
 
-/* ===== events ===== */
-
-function currentDay() {
+function vNotesSheet() {
   const dp = parsedProgram();
-  return dayAt(dp, S.dayIdx);
+  const body = dp.info.length
+    ? dp.info
+        .map(function (sec) {
+          return (
+            '<div class="grp"><h2>' + esc(sec.heading) + "</h2>" +
+            sec.lines
+              .map(function (l) {
+                return '<p class="' + (/:$/.test(l) ? "b" : "") + '">' + esc(l) + "</p>";
+              })
+              .join("") + "</div>"
+          );
+        })
+        .join("")
+    : '<p style="color:var(--faint);font-size:14px">This program has no notes.</p>';
+  return sheetShell("Program notes", activeProgram().title, '<div class="notes">' + body + "</div>");
 }
-function currentDateLabel() {
-  const day = currentDay();
-  const wd = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"].indexOf(
-    day.name.toLowerCase()
+
+function vProgramRow(p, opts) {
+  const dp = parseProgram(p.raw);
+  const pw = programWeek(p.start, 0, dp.length, isNumberedDp(dp));
+  const on = p.id === S.activeId;
+  const status = !pw
+    ? "Set a date to track weeks"
+    : (pw.before ? "Starts " + weekTag(ymd(pw.startMonday)) : "Now on week " + pw.eff +
+        (pw.length ? " of " + pw.length : "") + (pw.round > 1 ? " · round " + pw.round : "")) +
+      " · wk 1 = " + weekTag(ymd(pw.startMonday));
+  return (
+    '<div class="block pcard' + (on ? " on" : "") + '">' +
+    '<div class="row" style="align-items:flex-start"><button class="grow" data-act="pick-prog" data-id="' + p.id + '">' +
+    (on ? '<span class="atag">ACTIVE' + (pw && !pw.before ? " \u00b7 WEEK " + pw.eff + (pw.length ? " OF " + pw.length : "") + (pw.round > 1 ? " \u00b7 R" + pw.round : "") : "") + "</span>" : "") +
+    '<div class="ttl' + (on ? " on" : "") + '">' + esc(p.title) + "</div>" +
+    '<div class="sub tnum">' + plu(dp.days.length, "day") + " · " +
+    plu(dp.days.reduce((a, d) => a + d.count, 0), "exercise") +
+    (dp.length ? " · " + plu(dp.length, "week") : "") + "</div></button>" +
+    '<button class="iconbtn pmore' + (S.pmenu === p.id ? " on" : "") + '" data-act="pmenu" data-id="' + p.id +
+    '" aria-label="Program actions"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"></circle>' +
+    '<circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg></button>' +
+    "</div>" +
+    (S.pmenu === p.id
+      ? '<div class="pmenu">' +
+        '<button data-act="copy-prog" data-id="' + p.id + '">&#8690;&nbsp; Copy text</button>' +
+        '<button data-act="edit-prog" data-id="' + p.id + '">&#9998;&nbsp; Edit</button>' +
+        (opts && opts.del ? '<button class="danger" data-act="del-prog" data-id="' + p.id + '">&#10005;&nbsp; Delete</button>' : "") +
+        "</div>"
+      : "") +
+    (pw && !pw.before && pw.length
+      ? '<div class="pprog"><i style="width:' + Math.min(100, Math.round((pw.eff / pw.length) * 100)) + '%"></i></div>'
+      : "") +
+    (isSingle(p)
+      ? ""
+      : '<div class="row mt" style="justify-content:space-between;border-top:1px solid var(--line);padding-top:12px">' +
+        '<div><div class="eyebrow">Week 1 starts</div>' +
+        '<div class="sub tnum">' + esc(status) + "</div></div>" +
+        '<input type="date" class="datefld tnum" value="' + esc(p.start || "") +
+        '" data-in="start" data-id="' + p.id + '"></div>') +
+    (dp.length
+      ? '<div class="row mt" style="justify-content:space-between;border-top:1px solid var(--line);padding-top:12px">' +
+        '<div class="grow"><div class="eyebrow">Auto-deload</div>' +
+        '<div class="sub">Halve working sets in week ' + dp.length + "</div></div>" +
+        '<button class="toggle' + (p.deload ? " on" : "") + '" data-act="deload" data-id="' + p.id +
+        '"><i></i></button></div>'
+      : "") +
+    "</div>"
   );
-  const a0 = progAnchorISO();
-  const d = a0 ? anchorOf(S.weekOff) : mondayOf(S.weekOff);
-  d.setDate(d.getDate() + (a0 ? Math.min(S.dayIdx, 6) : wd >= 0 ? wd : Math.min(S.dayIdx, 6)));
-  return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
 }
 
-document.addEventListener("click", (ev) => {
-  const el = ev.target.closest("[data-act]");
-  if (!el) return;
-  const a = el.dataset.act;
+function singleCat(p) {
+  const dp = parseProgram(p.raw);
+  const label = dp.days.map(function (d) {
+    return d.items.filter(function (x) { return x.kind === "ex"; })
+      .map(function (x) { return x.name; }).join(" ");
+  }).join(" ");
+  /* the title is the strongest signal for a whole session */
+  return guessCat(dp.title || p.title || "", (dp.title || p.title || "") + " " + label);
+}
 
-  if (a === "sheet-bg" && ev.target !== el) return;
-
-  switch (a) {
-    case "prog-open":
-      S.sheet = { type: "programs" };
-      break;
-    case "sheet-close":
-    case "sheet-bg":
-      S.sheet = null;
-      break;
-    case "wk-prev":
-      S.weekOff--;
-      break;
-    case "wk-next":
-      S.weekOff++;
-      break;
-    case "tab":
-      S.page = null;
-      S.tab = el.dataset.t;
-      S.reorder = false;
-      break;
-    case "day":
-      S.dayIdx = +el.dataset.i;
-      S.openEx = null;
-      S.reorder = false;
-      break;
-    case "expand":
-      S.openEx = S.openEx === el.dataset.key ? null : el.dataset.key;
-      break;
-    case "tick": {
-      const k = el.dataset.key;
-      const i = +el.dataset.i;
-      const e = entriesFor(k);
-      const cur = e[i] || {};
-      /* tapping an empty set with a ghost behind it logs the ghost */
-      if (!cur.d && el.dataset.sw != null) {
-        patch(k, i, { w: el.dataset.sw, r: el.dataset.sr, d: true }, el.dataset.name);
-        break;
-      }
-      /* untapping empties the set, whether the numbers were tapped in or
-         typed: sets logged against the wrong day come off in one tap each
-         instead of backspacing every field. Drop children go with it. */
-      if (cur.d) {
-        const wipe = { w: "", r: "", d: false };
-        if ((cur.dr || []).length)
-          wipe.dr = cur.dr.map(function () {
-            return { w: "", r: "" };
-          });
-        let prev;
-        try {
-          prev = JSON.parse(JSON.stringify(cur));
-        } catch (e2) {
-          prev = Object.assign({}, cur);
-        }
-        patch(k, i, wipe, el.dataset.name);
-        offerUndo(k, i, el.dataset.name, prev);
-        break;
-      }
-      /* nothing to log while the reps box reads zero; the field is
-         already marked, so the tap simply does not take */
-      if (repsBad(cur)) break;
-      patch(k, i, { d: true }, el.dataset.name);
-      break;
-    }
-    case "clear-day":
-      if (confirm("Clear everything logged for this day?")) clearDay(currentDay());
-      break;
-    case "finish":
-      S.sheet = { type: "summary", dateLabel: currentDateLabel() };
-      break;
-    case "sum-backup":
-      downloadBackup();
-      markBackedUp();
-      break;
-    case "log-session": {
-      const day = currentDay();
-      stampDeloadDay(day);
-      const stats = summarize(day, entriesFor, effWeek());
-      const wk = wkNow();
-      const ap = activeProgram();
-      const singleNow = activeIsSingle();
-      S.log.sessions[wk] = S.log.sessions[wk] || {};
-      S.log.sessions[wk][scopedDay(day.id)] = {
-        at: new Date().toISOString(),
-        d: sessionDayISO(wk, day, singleNow),
-        sets: stats.setsDone,
-        volume: stats.volume,
-        pn: ap ? ap.title : "",
-        dn: singleNow ? "" : (daySwap(day) && daySwap(day).t) || day.title || day.name || "",
-        gg: singleNow ? 1 : 0,
-      };
-      if (singleNow) {
-        S.log.wo = S.log.wo && S.log.wo.id === ap.id
-          ? Object.assign({}, S.log.wo, { logged: true, doneName: ap.title })
-          : { id: ap.id, resume: null, day: todayISO(), logged: true, doneName: ap.title };
-      }
-      persist();
-      S.sheet = null;
-      break;
-    }
-    case "copy-summary": {
-      const day = currentDay();
-      copyText(summaryText(day, summarize(day, entriesFor, effWeek()), currentDateLabel()), el);
-      return;
-    }
-    case "copy-last": {
-      const n = copyLastWeek(currentDay());
-      if (!n) alert("Nothing from last week matched the lifts in this day.");
-      break;
-    }
-    case "unit": {
-      const u = el.dataset.u;
-      if (u === unit()) return;
-      const has =
-        Object.keys(S.log.weeks || {}).length ||
-        (S.log.body && Object.keys(S.log.body).length) ||
-        (S.log.pbs && Object.keys(S.log.pbs).length);
-      if (has && confirm("Convert everything already logged to " + u + "?")) {
-        convertAll(u);
-      } else {
-        setSetting({ unit: u });
-      }
-      break;
-    }
-    case "nudge":
-      setSetting({ nudge: settings().nudge === false });
-      break;
-    case "refresh-app":
-      try {
-        if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
-          navigator.serviceWorker
-            .getRegistrations()
-            .then((rs) => Promise.all(rs.map((r) => r.update())))
-            .then(() =>
-              window.caches
-                ? caches.keys().then((ks) => Promise.all(ks.map((k) => caches.delete(k))))
-                : null
-            )
-            .then(() => location.reload())
-            .catch(() => location.reload());
-          return;
-        }
-      } catch (e) {}
-      location.reload();
-      return;
-    case "sets-plus":
-    case "sets-minus": {
-      const k = el.dataset.key;
-      const dp2 = parsedProgram();
-      let it2 = null;
-      dp2.days.forEach(function (d) {
-        d.items.forEach(function (x) {
-          if (x.key === k) it2 = x;
-        });
-      });
-      if (!it2) {
-        const e3 = (S.log.weeks[wkNow()] || {})[k];
-        if (e3 && /:d\d+a\d+$/.test(k)) {
-          const cur2 = e3.sets || 1;
-          e3.sets = a === "sets-plus" ? Math.min(20, cur2 + 1) : Math.max(1, cur2 - 1);
-          persist();
-          render();
-        }
-        return;
-      }
-      const cur = setsFor(it2);
-      const next = a === "sets-plus" ? Math.min(20, cur + 1) : Math.max(1, cur - 1);
-      const base = deloadActive() ? Math.max(1, Math.round((it2.sets || 1) * 0.5)) : it2.sets || 1;
-      writeEntry(k, "sets", next === base ? null : next, el.dataset.name);
-      break;
-    }
-    case "swap-open":
-      S.sheet = { type: "swap", key: el.dataset.key, orig: el.dataset.orig,
-        extra: !!el.dataset.extra, name: entryField(el.dataset.key, "alt") || "" };
-      break;
-    case "name-pick":
-      if (S.sheet) S.sheet.name = el.dataset.n;
-      break;
-    case "swap-save": {
-      const sp = S.sheet;
-      const nm = canonName((sp.name || "").trim(), sp._cat);
-      writeEntry(sp.key, "alt", !nm || nn(nm) === nn(sp.orig) ? null : nm, sp.orig);
-      /* sets that were parked when an earlier build lost this swap's slot
-         come home the moment the same swap is made again */
-      if (nm) {
-        const wk0 = wkNow();
-        const w0 = S.log.weeks[wk0] || {};
-        const ap0 = activeProgram();
-        const pk0 = (ap0 ? ap0.id : "") + ":x:" + nn(nm);
-        const parked = w0[pk0];
-        if (parked && w0[sp.key]) {
-          const ex0 = w0[sp.key];
-          setIdx(parked).forEach(function (i) {
-            if (ex0[i] == null) ex0[i] = parked[i];
-          });
-          if (parked.sets != null && ex0.sets == null) ex0.sets = parked.sets;
-          delete w0[pk0];
-          persist();
-        }
-      }
-      S.sheet = null;
-      break;
-    }
-    case "swap-revert":
-      writeEntry(S.sheet.key, "alt", null, S.sheet.orig);
-      S.sheet = null;
-      break;
-    case "day-reset":
-      writeEntry(el.dataset.key, "sets", null, el.dataset.name);
-      writeEntry(el.dataset.key, "alt", null, el.dataset.name);
-      break;
-    case "addex-open":
-      S.sheet = { type: "addex", di: currentDayIndex(), name: "", sets: "", reps: "" };
-      break;
-    case "dayswap-open": {
-      const dsd = currentDay();
-      S.sheet = { type: "dayswap", di: currentDayIndex(), dayId: dsd.id,
-        orig: dsd.title || dsd.name };
-      break;
-    }
-    case "dayswap-pick": {
-      const sh = S.sheet;
-      const g = S.programs.find(function (x) { return x.id === el.dataset.pid; });
-      if (!g) break;
-      const gdp = applyFixes(parseProgram(g.raw), g.fixes);
-      const wkd = wkNow();
-      if (!S.log.weeks[wkd]) S.log.weeks[wkd] = {};
-      const pidd = activeProgram().id;
-      S.log.weeks[wkd][daySwapKey(sh.dayId)] = {
-        t: g.title || gdp.title || "Stand-in workout", src: g.id };
-      /* a snapshot, not a link: the day keeps what was picked even if the
-         grab-and-go workout is edited later */
-      gdp.days[0].items.forEach(function (it) {
-        if (it.kind !== "ex") return;
-        let n = 0;
-        while (S.log.weeks[wkd][pidd + ":d" + sh.di + "a" + n]) n++;
-        S.log.weeks[wkd][pidd + ":d" + sh.di + "a" + n] = {
-          n: it.name,
-          sets: Math.min(20, Math.max(1, parseInt(it.sets, 10) || 3)),
-          reps: (it.reps || "") + "",
-          ds: 1, /* placed by the day swap, so undoing it can tidy these away */
-        };
-      });
-      persist();
-      S.sheet = null;
-      break;
-    }
-    case "dayswap-off":
-      if (confirm("Bring the program day back? Sets you already logged are kept as added exercises.")) {
-        const wko = wkNow();
-        const wo2 = S.log.weeks[wko] || {};
-        delete wo2[daySwapKey(currentDay().id)];
-        /* the stand-in's own exercises leave with it, unless sets were logged
-           on them: logged work is never thrown away */
-        dayExtras(currentDayIndex()).forEach(function (it) {
-          const e2 = wo2[it.key];
-          if (!e2 || !e2.ds) return;
-          const touched = setIdx(e2).some(function (i) { return e2[i] && (e2[i].d || e2[i].w || e2[i].r); });
-          if (!touched) delete wo2[it.key];
-        });
-        persist();
-      }
-      break;
-    case "ax-save": {
-      const sh = S.sheet;
-      const nm = canonName((sh.name || "").trim(), sh._cat);
-      if (!nm) {
-        alert("Give it a name first, or Cancel.");
-        return;
-      }
-      const wk = wkNow();
-      if (!S.log.weeks[wk]) S.log.weeks[wk] = {};
-      const pid = activeProgram().id;
-      let n = 0;
-      while (S.log.weeks[wk][pid + ":d" + sh.di + "a" + n]) n++;
-      const sets = Math.min(20, Math.max(1, parseInt(sh.sets, 10) || 3));
-      S.log.weeks[wk][pid + ":d" + sh.di + "a" + n] = { n: nm, sets: sets, reps: (sh.reps || "").trim() };
-      persist();
-      S.sheet = null;
-      break;
-    }
-    case "extra-remove": {
-      const k = el.dataset.key;
-      const e2 = (S.log.weeks[wkNow()] || {})[k];
-      const has = e2 && setIdx(e2).some(function (i) { return e2[i] && e2[i].d; });
-      if (has && !confirm("Remove this exercise and its logged sets for today?")) return;
-      delete S.log.weeks[wkNow()][k];
-      persist();
-      break;
-    }
-    case "drop-add": {
-      const wk2 = wkNow();
-      if (!S.log.weeks[wk2]) S.log.weeks[wk2] = {};
-      const ex2 = (S.log.weeks[wk2][el.dataset.key] = S.log.weeks[wk2][el.dataset.key] || {});
-      if (el.dataset.name && !ex2.n) ex2.n = el.dataset.name;
-      const st2 = (ex2[el.dataset.i] = ex2[el.dataset.i] || {});
-      st2.dr = st2.dr || [];
-      let seed = Math.max(1, +el.dataset.dn || 1);
-      while (seed-- > 0 && st2.dr.length < 4) st2.dr.push({ w: "", r: "" });
-      persist();
-      break;
-    }
-    case "drop-del": {
-      const e4 = (S.log.weeks[wkNow()] || {})[el.dataset.key];
-      const st3 = e4 && e4[el.dataset.i];
-      if (st3 && st3.dr) {
-        st3.dr.splice(+el.dataset.j, 1);
-        if (!st3.dr.length) delete st3.dr;
-        persist();
-      }
-      break;
-    }
-    case "notes-open":
-      S.sheet = { type: "notes" };
-      break;
-    case "reorder-on":
-      S.reorder = true;
-      S.openEx = null;
-      break;
-    case "reorder-off":
-      S.reorder = false;
-      break;
-    case "mv-up":
-      moveItem(currentDay(), +el.dataset.i, -1);
-      break;
-    case "mv-dn":
-      moveItem(currentDay(), +el.dataset.i, 1);
-      break;
-    case "order-reset":
-      resetOrder(currentDay());
-      break;
-    case "deload": {
-      const pr = S.programs.find((x) => x.id === el.dataset.id);
-      if (pr) {
-        pr.deload = !pr.deload;
-        persist();
-      }
-      break;
-    }
-    case "pb-edit": {
-      const best = effectiveBests();
-      const k = el.dataset.k;
-      const b = best[k] || { name: "", w: "", r: "" };
-      S.sheet = { type: "pb", key: k, name: b.name || "", w: b.w == null ? "" : String(b.w),
-        r: b.r == null ? "" : String(b.r), src: b.src, isNew: false,
-        cat: catOf(k, b.name, dayTitleIndex()), catAuto: !userCats()[k] };
-      break;
-    }
-    case "pb-toggle": {
-      const c = el.dataset.c;
-      if (!S.pbOpen) S.pbOpen = {};
-      if (S.pbOpen[c]) delete S.pbOpen[c];
-      else S.pbOpen[c] = true;
-      break;
-    }
-    case "pb-search-clear":
-      S.pbQuery = "";
-      break;
-    case "pb-setcat":
-      S.sheet.cat = el.dataset.c;
-      S.sheet.catAuto = false;
-      break;
-    case "pb-new":
-      S.sheet = { type: "pb", key: null, name: "", w: "", r: "", isNew: true, cat: "other",
-        catAuto: true };
-      break;
-    case "pb-save": {
-      const p2 = S.sheet;
-      const name = (p2.name || "").trim();
-      const w = numOf(p2.w);
-      if (!name || isNaN(w)) {
-        alert("A name and a weight are both needed.");
-        return;
-      }
-      const man = manualPBs();
-      const newKey = nn(name);
-      if (p2.key && p2.key !== newKey) man[p2.key] = { hidden: true };
-      man[newKey] = { name: name, w: String(p2.w).trim(), r: String(p2.r || "").trim() };
-      const auto = guessCat(name, dayTitleIndex()[newKey]);
-      if (p2.cat && p2.cat !== auto) userCats()[newKey] = p2.cat;
-      else delete userCats()[newKey];
-      /* show where it landed rather than letting it vanish */
-      if (!S.pbOpen) S.pbOpen = {};
-      S.pbOpen[p2.cat || auto] = true;
-      persist();
-      S.sheet = null;
-      break;
-    }
-    case "pb-remove": {
-      const p3 = S.sheet;
-      if (!p3.key) {
-        S.sheet = null;
-        break;
-      }
-      if (!confirm("Remove this from the list? Logged sets are not deleted.")) return;
-      const man2 = manualPBs();
-      if (p3.src === "manual" && !bestIndex(null)[p3.key]) delete man2[p3.key];
-      else man2[p3.key] = { hidden: true };
-      persist();
-      S.sheet = null;
-      break;
-    }
-    case "review":
-      S.pendingFix = {};
-      S.sheet = { type: "review" };
-      break;
-    case "fix-skip":
-      S.pendingFix = S.pendingFix || {};
-      S.pendingFix[nn(el.dataset.n)] = { skip: true };
-      saveFixes();
-      S.sheet = { type: "review" };
-      break;
-    case "fix-save":
-      saveFixes();
-      S.sheet = null;
-      break;
-    case "theme":
-      setSetting({ theme: el.dataset.k });
-      applyTheme();
-      break;
-    case "accent-reset":
-      setSetting({ accent: null });
-      applyTheme();
-      break;
-    case "backup-copy":
-      copyText(backupJSON(), el);
-      markBackedUp();
-      return;
-    case "backup-file":
-      downloadBackup();
-      markBackedUp();
-      break;
-    case "nag-backup":
-      downloadBackup();
-      markBackedUp();
-      S.tab = "profile";
-      S.page = "settings";
-      break;
-    case "nag-hide":
-      setSetting({ hideBackupBar: true });
-      break;
-    case "restore":
-      S.restoreText = "";
-      S.sheet = { type: "restore" };
-      break;
-    case "restore-go":
-      if (!restoreBackup(S.restoreText || "")) return;
-      break;
-    case "autotick":
-      setSetting({ autoTick: settings().autoTick === false });
-      break;
-    case "autorest":
-      setSetting({ autoRest: !settings().autoRest });
-      break;
-    case "restsec":
-      setSetting({ restSec: +el.dataset.s });
-      break;
-    case "update-go":
-      location.reload();
-      return;
-    case "update-hide":
-      updateHidden = updateReady;
-      updateReady = null;
-      break;
-    case "undo-take":
-      if (!takeUndo()) return;
-      break;
-    case "undo-drop":
-      dropUndo();
-      return;
-    case "rest-add":
-      startRest(restLeft() + 30);
-      return;
-    case "rest-stop":
-      stopRest();
-      return;
-    case "page":
-      S.page = el.dataset.p || null;
-      break;
-    case "sess-open":
-      S.sheet = { type: "sess", wk: el.dataset.wk, k: el.dataset.k };
-      break;
-    case "start-now": {
-      const p2 = activeProgram();
-      if (p2) {
-        p2.start = progAnchorISO() ? todayISO() : ymd(new Date(mondayOf(0)));
-        migrateAnchor();
-        persist();
-      }
-      break;
-    }
-    case "cal-today":
-      S.calM = null;
-      S.calD = todayISO();
-      break;
-    case "cal-day":
-      S.calD = el.dataset.d;
-      break;
-    case "cal-prev":
-    case "cal-next": {
-      const now = new Date();
-      const cm = S.calM || now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
-      const y = +cm.slice(0, 4), m = +cm.slice(5, 7) - 1 + (a === "cal-next" ? 1 : -1);
-      const d2 = new Date(y, m, 1);
-      S.calM = d2.getFullYear() + "-" + String(d2.getMonth() + 1).padStart(2, "0");
-      break;
-    }
-    case "ton-week":
-      S.tonSel = el.dataset.w;
-      break;
-    case "wo-cat":
-      S.woCat = el.dataset.c;
-      break;
-    case "wo-resume": {
-      const wo0 = S.log.wo;
-      if (wo0 && wo0.resume && S.programs.some(function (x) { return x.id === wo0.resume; }))
-        S.activeId = wo0.resume;
-      S.log.wo = null;
-      S.dayIdx = 0;
-      S.openEx = null;
-      seedToday();
-      persist();
-      break;
-    }
-    case "wo-pick":
-    case "pick-prog": {
-      const target = S.programs.find(function (x) { return x.id === el.dataset.id; });
-      if (!target) break;
-      if (isSingle(target)) {
-        const prevResume =
-          S.log.wo && S.log.wo.resume
-            ? S.log.wo.resume
-            : activeIsSingle()
-              ? null
-              : S.activeId;
-        S.log.wo = { id: target.id, resume: prevResume, day: todayISO(), logged: false };
-      } else {
-        S.log.wo = null;
-      }
-      S.activeId = el.dataset.id;
-      S.dayIdx = 0;
-      S.openEx = null;
-      S.sheet = null;
-      S.tab = "train";
-      seedToday();
-      persist();
-      break;
-    }
-    case "edit-prog":
-    case "edit-active": {
-      const id = el.dataset.id || S.activeId;
-      const p = S.programs.find((x) => x.id === id);
-      S.editing = id;
-      S.draft = { text: p ? p.raw : "", start: (p && p.start) || mondayISO() };
-      S.sheet = null;
-      break;
-    }
-    case "copy-prog": {
-      const p = S.programs.find((x) => x.id === el.dataset.id);
-      if (p) copyText(p.raw);
-      alert("Program text copied. Send it to a friend and they can paste it into their own copy.");
-      return;
-    }
-    case "del-prog": {
-      const p = S.programs.find((x) => x.id === el.dataset.id);
-      if (!p || !confirm('Delete "' + p.title + '"? Logged sets are kept.')) return;
-      S.programs = S.programs.filter((x) => x.id !== p.id);
-      if (S.activeId === p.id) S.activeId = S.programs[0] && S.programs[0].id;
-      persist();
-      break;
-    }
-    case "build-new":
-      S.build = newBuild();
-      S.editing = "build";
-      S.sheet = null;
-      break;
-    case "b-cancel":
-      S.editing = null;
-      break;
-    case "b-preview":
-      S.build.preview = !S.build.preview;
-      break;
-    case "b-add-day": {
-      const used = S.build.days.map((d) => d.name);
-      const next = DAY_CHOICES.find((c) => used.indexOf(c) < 0) || "Day 1";
-      S.build.days.push({ name: next, title: "", items: [{ name: "", sets: "", reps: "", alt: "" }] });
-      S.build.open = S.build.days.length - 1;
-      break;
-    }
-    case "b-open-day":
-      S.build.open = S.build.open === +el.dataset.i ? -1 : +el.dataset.i;
-      break;
-    case "b-del-day":
-      if (!confirm("Remove this day?")) return;
-      S.build.days.splice(+el.dataset.i, 1);
-      S.build.open = -1;
-      break;
-    case "b-day-up":
-    case "b-day-dn": {
-      const di = +el.dataset.i;
-      const dj = di + (a === "b-day-up" ? -1 : 1);
-      if (dj < 0 || dj >= S.build.days.length) return;
-      const dt = S.build.days[di];
-      S.build.days[di] = S.build.days[dj];
-      S.build.days[dj] = dt;
-      S.build.open = dj;
-      break;
-    }
-    case "b-add-ex":
-      S.build.days[+el.dataset.i].items.push({ name: "", sets: "", reps: "", alt: "" });
-      break;
-    case "b-del-ex":
-      S.build.days[+el.dataset.d].items.splice(+el.dataset.i, 1);
-      break;
-    case "b-ex-up":
-    case "b-ex-dn": {
-      const xs = S.build.days[+el.dataset.d].items;
-      const xi = +el.dataset.i;
-      const xj = xi + (a === "b-ex-up" ? -1 : 1);
-      if (xj < 0 || xj >= xs.length) return;
-      const xt = xs[xi];
-      xs[xi] = xs[xj];
-      xs[xj] = xt;
-      break;
-    }
-    case "b-alt":
-      S.build.days[+el.dataset.d].items[+el.dataset.i].alt = el.dataset.v;
-      break;
-    case "b-save": {
-      const b = S.build;
-      if (!buildValid(b)) return;
-      const raw = buildText(b);
-      const dp = parseProgram(raw);
-      const np = { id: "p" + Date.now(), raw: raw, title: dp.title, start: b.start };
-      S.programs.push(np);
-      S.activeId = np.id;
-      cacheRaw = null;
-      S.editing = null;
-      S.dayIdx = 0;
-      S.tab = "train";
-      seedToday();
-      persist();
-      break;
-    }
-    case "new-prog":
-      S.editing = "new";
-      S.draft = { text: "", start: defaultStart() };
-      S.sheet = null;
-      break;
-    case "paste-cancel":
-      S.editing = null;
-      break;
-    case "paste-example":
-      S.draft.text = SEED;
-      render();
-      return;
-    case "paste-save": {
-      const dp = parseProgram(S.draft.text);
-      if (!dp.days.length || !dp.days.reduce((a, d) => a + d.count, 0)) return;
-      const multi = dp.days.length > 1 || !!dp.length;
-      const existingStart = S.editing !== "new" && (S.programs.find((x) => x.id === S.editing) || {}).start;
-      if (multi && !existingStart) {
-        /* ask, never assume: confirm week 1 before anything is saved */
-        S.draft.start = S.draft.start || (isNumberedDp(dp) ? todayISO() : defaultStart());
-        S.sheet = { type: "startask" };
-        break;
-      }
-      savePasted(dp);
-      break;
-    }
-    case "startask-go": {
-      const dp = parseProgram(S.draft.text);
-      S.sheet = null;
-      savePasted(dp);
-      break;
-    }
-    case "startask-cancel":
-      S.sheet = null;
-      break;
-    default:
-      return;
-  }
-  render();
+/* Library search: matches the program title and its pasted text, so a lift
+   name finds every program that contains it. Filtering hides rows in place
+   instead of re-rendering, so the keyboard stays up while typing. */
+function libMatch(p) {
+  const q = String(S.libQ || "").trim().toLowerCase();
+  if (!q) return true;
+  return ((p.title || "") + " " + (p.raw || "")).toLowerCase().indexOf(q) !== -1;
+}
+function libRow(p) {
+  return '<div data-pid="' + esc(p.id) + '"' + (libMatch(p) ? "" : ' style="display:none"') + ">" +
+    vProgramRow(p, { del: S.programs.length > 1 }) + "</div>";
+}
+document.addEventListener("input", function (ev) {
+  if (!ev.target || ev.target.id !== "libq") return;
+  S.libQ = ev.target.value;
+  let any = false;
+  document.querySelectorAll("[data-pid]").forEach(function (el) {
+    const p = S.programs.find(function (x) { return String(x.id) === el.dataset.pid; });
+    const hit = !p || libMatch(p);
+    el.style.display = hit ? "" : "none";
+    if (hit) any = true;
+  });
+  const none = document.getElementById("libnone");
+  if (none) none.style.display = S.libQ.trim() && !any ? "block" : "none";
 });
+function vLibrary() {
+  const dp = parsedProgram();
+  const unclear = dp ? unclearList(dp) : [];
+  const progs = S.programs.filter(function (p) { return !isSingle(p); });
+  const singles = S.programs.filter(isSingle);
+  const catFilter = S.woCat || "all";
+  const cats = {};
+  singles.forEach(function (p) { cats[singleCat(p)] = 1; });
+  const chipRow = singles.length
+    ? '<div class="row" style="flex-wrap:wrap;gap:8px;margin-top:12px">' +
+      ['all'].concat(Object.keys(cats)).map(function (c) {
+        return (
+          '<button class="chip2' + (catFilter === c ? " on" : "") + '" data-act="wo-cat" data-c="' + c + '">' +
+          (c === "all" ? "All" : CAT_NAME[c]) + "</button>"
+        );
+      }).join("") + "</div>"
+    : "";
+  const shown = singles.filter(function (p) { return catFilter === "all" || singleCat(p) === catFilter; });
+  return (
+    '<div class="wrap pad">' +
+    '<div class="libtop">' +
+    '<label class="fld libq"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>' +
+    '<input id="libq" type="search" placeholder="Search programs and lifts" autocomplete="off" value="' + esc(S.libQ || "") + '"></label>' +
+    '<div class="row" style="gap:12px;margin-top:10px">' +
+    '<button class="dash grow" data-act="new-prog">Paste text</button>' +
+    '<button class="dash grow" data-act="build-new">Build one</button></div></div>' +
+    '<p id="libnone" style="color:var(--faint);font-size:13px;margin:12px 0 0;display:' +
+    (S.libQ && !S.programs.some(libMatch) ? "block" : "none") + '">No programs or lifts match.</p>' +
+    '<div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">' +
+    (progs.length
+      ? progs.map((p) => libRow(p)).join("")
+      : '<p style="color:var(--faint);font-size:13px;margin:0">No multi-week programs yet.</p>') +
+    "</div>" +
+    '<div class="eyebrow" style="margin-top:24px">Grab-and-go workouts</div>' +
+    (singles.length
+      ? chipRow +
+        '<div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">' +
+        shown.map((p) => libRow(p)).join("") +
+        "</div>"
+      : '<p style="color:var(--faint);font-size:13px;margin:12px 0 0">Paste a single-day session &mdash; ' +
+        '"Back Pump", "Leg Blast" &mdash; and it lands here, ready to grab on the day.</p>') +
+    (unclear.length
+      ? '<div class="needs mt2"><div class="grow"><b>' + unclear.length +
+        (unclear.length === 1 ? " exercise needs" : " exercises need") + " sets &amp; reps</b>" +
+        "<span>In " + esc(activeProgram().title) + ", couldn&rsquo;t be read from the text</span></div>" +
+        '<button class="btn-amber" data-act="review">Confirm</button></div>'
+      : "") +
+    "</div>"
+  );
+}
 
-/* text + date inputs */
-let previewTimer = null;
-document.addEventListener("input", (ev) => {
-  const el = ev.target;
-  const k = el.dataset.in;
-  if (!k) return;
-
-  if (k === "dw" || k === "dq") {
-    const e5 = (S.log.weeks[wkNow()] || {})[el.dataset.key];
-    const st4 = e5 && e5[el.dataset.i];
-    const d5 = st4 && st4.dr && st4.dr[+el.dataset.j];
-    if (d5) {
-      d5[k === "dw" ? "w" : "r"] = el.value;
-      persist();
-      clearTimeout(tickTimer);
-      const tKey = el.dataset.key;
-      const tI = +el.dataset.i;
-      tickTimer = setTimeout(function () {
-        autoTick(tKey, tI, null);
-      }, 700);
-    }
-    return;
-  }
-  if (k === "w" || k === "r") {
-    const o = {};
-    o[k] = el.value;
-    const wk = wkNow();
-    S.log.weeks[wk] = S.log.weeks[wk] || {};
-    S.log.weeks[wk][el.dataset.key] = S.log.weeks[wk][el.dataset.key] || {};
-    S.log.weeks[wk][el.dataset.key].n = el.dataset.name;
-    S.log.weeks[wk][el.dataset.key][+el.dataset.i] = Object.assign(
-      {},
-      S.log.weeks[wk][el.dataset.key][+el.dataset.i],
-      o
+const ACCENT_PRESETS = ["#F0B43C", "#5B8CFF", "#4FE3C8", "#9A88FF", "#FF5A64", "#6FD49A", "#F2F2F2", "#FF8A1F"];
+const POP_PRESETS = ["#FF6B4A", "#FF8A1F", "#FF9EC7", "#FF6FC8", "#F5C451", "#4FE3C8", "#5B8CFF", "#F2F2F2"];
+const PAIRINGS = [
+  ["Blue / Orange", "#5B8CFF", "#FF8A1F"],
+  ["Jade / Pink", "#4FE3C8", "#FF9EC7"],
+  ["Violet / Pink", "#9A88FF", "#FF6FC8"],
+  ["Amber / Coral", "#F0B43C", "#FF6B4A"],
+  ["Red / Gold", "#FF5A64", "#F5C451"],
+  ["Mint / Amber", "#6FD49A", "#F0B43C"]
+];
+/* accent + pop on top of any theme, with a live preview drawn from the CSS variables */
+function vCustomise(st) {
+  const t = THEMES[st.theme] || THEMES.ember;
+  const cur = function (v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); };
+  const row = function (label, key, presets, act, resetAct, resetId, labelId) {
+    const val = st[key];
+    return (
+      '<div class="crow"><div class="crow-h"><span>' + label + '</span><span class="crow-v" id="' + labelId + '">' +
+      (val ? esc(val.toUpperCase()) : "Theme default") + "</span>" +
+      '<button class="link" data-act="' + resetAct + '" id="' + resetId + '"' + (val ? "" : ' style="visibility:hidden"') +
+      ">Reset</button></div>" +
+      '<div class="cdots">' +
+      presets.map(function (c) {
+        return '<button class="cdot' + (val && val.toUpperCase() === c ? " on" : "") + '" data-act="' + act +
+          '" data-c="' + c + '" style="background:' + c + '" aria-label="' + label + " " + c + '"></button>';
+      }).join("") +
+      '<label class="cpick" aria-label="Pick any ' + label.toLowerCase() + ' colour"><input type="color" value="' +
+      esc(val || cur(key === "accent" ? "--brass" : "--pop") || (key === "accent" ? t.brass : t.pop)) +
+      '" data-in="' + key + '"></label></div></div>'
     );
-    persist();
-    clearTimeout(tickTimer);
-    const tKey = el.dataset.key;
-    const tI = +el.dataset.i;
-    const tName = el.dataset.name;
-    tickTimer = setTimeout(function () {
-      if (autoTick(tKey, tI, tName)) return;
-      /* Correcting a set that is already logged moves everything derived
-         from it: best ever, the PB pill, the rep-max estimates, the day
-         total, and the ghosts on later sets. autoTick bails on a logged
-         set, so without this the card keeps showing the old figures until
-         the next reload - a mistyped 45 reps still reading as a best long
-         after it was fixed. render() carries focus and caret across, so
-         this is safe mid-edit. */
-      const exNow = S.log.weeks[wkNow()] && S.log.weeks[wkNow()][tKey];
-      const sNow = exNow && exNow[tI];
-      if (!sNow) return;
-      /* a set cannot stay logged once its reps read zero: correcting a good
-         set down to 0 un-logs it, and fixing the number logs it again */
-      if (sNow.d && repsBad(sNow)) {
-        sNow.d = false;
-        persist();
+  };
+  return (
+    '<div class="block mt2 custom"><div class="eyebrow">Make it yours</div>' +
+    '<p class="cnote">Your own accent and pop on top of any theme. Colours that would be hard to read are nudged lighter or darker for you.</p>' +
+    '<div class="cprev" aria-hidden="true"><span class="cprev-day"><small>WED</small><b>4</b></span>' +
+    '<span class="grow"><span class="cprev-eye"><span class="tdy">Today</span> \u00b7 Wed, Nov 4</span>' +
+    '<span class="cprev-ttl">Leg Day</span><span class="badge pb">PB</span></span>' +
+    '<svg class="cprev-ring" viewBox="0 0 44 44"><circle cx="22" cy="22" r="18"></circle><circle class="on" cx="22" cy="22" r="18" stroke-dasharray="113" stroke-dashoffset="70"></circle></svg></div>' +
+    '<div class="eyebrow mt">Pairings</div><div class="pairs">' +
+    PAIRINGS.map(function (p) {
+      const on = st.accent && st.pop && st.accent.toUpperCase() === p[1] && st.pop.toUpperCase() === p[2];
+      return '<button class="pair' + (on ? " on" : "") + '" data-act="pair-set" data-a="' + p[1] + '" data-p="' + p[2] + '">' +
+        '<i style="background:' + p[1] + '"></i><i style="background:' + p[2] + '"></i><span>' + esc(p[0]) + "</span></button>";
+    }).join("") + "</div>" +
+    row("Accent", "accent", ACCENT_PRESETS, "accent-set", "accent-reset", "accent-reset", "accent-label") +
+    row("Pop", "pop", POP_PRESETS, "pop-set", "pop-reset", "pop-reset", "pop-label") +
+    (st.accent || st.pop ? '<button class="btn-ghost" style="width:100%;margin-top:14px" data-act="custom-reset">Back to ' + esc(t.name) + " colours</button>" : "") +
+    "</div>"
+  );
+}
+function vStyle() {
+  const st = settings();
+  const themeCards = Object.keys(THEMES)
+    .map((k) => {
+      const t = THEMES[k];
+      return (
+        '<button class="sw' + (st.theme === k || (!st.theme && k === "ember") ? " on" : "") +
+        '" data-act="theme" data-k="' + k + '" style="background:' + t.panel + ";color:" + t.chalk + '"><b>' + esc(t.name) + "</b>" +
+        '<span class="dots"><i style="background:' + t.brass + '"></i>' +
+        '<i style="background:' + t.pop + '"></i></span></button>'
+      );
+    })
+    .join("");
+
+  return (
+    '<div class="wrap pad">' +
+    '<div class="eyebrow">Appearance</div>' +
+    '<div class="swatches">' + themeCards + "</div>" +
+    vCustomise(st) +
+
+    "</div>"
+  );
+}
+
+/* the build stamp from the head of the file, so the app can say which one it is */
+function buildId() {
+  const m = document.querySelector('meta[name="build"]');
+  return (m && m.content) || "unknown";
+}
+function vSettingsPage() {
+  const st = settings();
+  return (
+    '<div class="wrap pad">' +
+    '<div><div class="eyebrow">Logging</div><div class="block mt"><div class="row">' +
+    '<span class="grow" style="font-size:15px">Tick a set once weight and reps are both filled</span>' +
+    '<button class="toggle' + (st.autoTick === false ? "" : " on") + '" data-act="autotick"><i></i></button>' +
+    "</div></div></div>" +
+
+    '<div class="mt3"><div class="eyebrow">Rest timer</div><div class="block mt">' +
+    '<div class="row"><span class="grow" style="font-size:15px">Start timer when a set is ticked</span>' +
+    '<button class="toggle' + (st.autoRest ? " on" : "") + '" data-act="autorest"><i></i></button></div>' +
+    '<div class="segs">' +
+    [60, 90, 120, 180]
+      .map(
+        (x) =>
+          '<button class="seg tnum' + (st.restSec === x ? " on" : "") +
+          '" data-act="restsec" data-s="' + x + '">' + x + "s</button>"
+      )
+      .join("") +
+    "</div></div></div>" +
+
+    '<div class="mt3"><div class="eyebrow">Units</div><div class="block mt">' +
+    '<div class="segs" style="margin-top:0">' +
+    ["kg", "lb"]
+      .map(
+        (u) =>
+          '<button class="seg' + (unit() === u ? " on" : "") + '" data-act="unit" data-u="' + u +
+          '">' + u + "</button>"
+      )
+      .join("") +
+    "</div>" +
+    '<p style="color:var(--faint);font-size:12px;margin:12px 0 0">Switching offers to convert everything ' +
+    "you have already logged, including body weight and plate sizes.</p></div></div>" +
+
+    '<div class="mt3"><div class="eyebrow">Coaching</div><div class="block mt"><div class="row">' +
+    '<span class="grow" style="font-size:15px">Suggest the next jump on each lift</span>' +
+    '<button class="toggle' + (st.nudge === false ? "" : " on") + '" data-act="nudge"><i></i></button>' +
+    "</div></div></div>" +
+
+    '<div class="mt3"><div class="eyebrow">Your data</div><div class="block mt">' +
+    '<p class="warn"><b>Read this once.</b> Safari and the home-screen icon keep <i>separate</i> storage, ' +
+    "so a log built up in one does not appear in the other. Deleting the home-screen icon deletes its data " +
+    "with it, and clearing Safari website data erases Safari's copy. Neither can be undone. Keep a backup " +
+    "and stick to one of the two.</p>" +
+    (daysSinceBackup() !== null
+      ? '<p class="tnum" style="color:var(--faint);font-size:12px;margin:10px 0 0">Last backup ' +
+        (daysSinceBackup() === 0 ? "today" : plu(daysSinceBackup(), "day") + " ago") + ".</p>"
+      : "") +
+    '<div class="row" style="gap:12px;margin-top:14px">' +
+    '<button class="btn-ghost" data-act="backup-copy">Copy backup</button>' +
+    '<button class="btn-primary" data-act="backup-file">Download backup</button></div>' +
+    '<button class="dash" style="margin-top:12px;height:44px" data-act="restore">Restore from a backup</button>' +
+    "</div></div>" +
+
+    '<div class="mt3"><div class="eyebrow">Offline</div><div class="block mt">' +
+    '<div class="row"><span class="grow" style="font-size:15px" id="offline-state">Checking&hellip;</span></div>' +
+    '<div class="row" style="margin-top:8px"><span class="grow tnum" style="color:var(--faint);font-size:12px">Build ' +
+    esc(buildId()) + "</span></div>" +
+    '<p style="color:var(--faint);font-size:12px;margin:10px 0 0">Once cached, the app opens with no signal. ' +
+    "New versions arrive on the launch after they are uploaded.</p>" +
+    '<button class="dash" style="margin-top:12px;height:44px" data-act="refresh-app">Load newest version now</button>' +
+    "</div></div>" +
+
+    '<div class="mt3"><div class="eyebrow">Sharing</div><div class="block mt">' +
+    '<p style="color:var(--mute);font-size:13px;line-height:1.6;margin:0">Anyone you send the link to gets ' +
+    "their own private copy. To hand over a workout, tap the copy icon on a program in the Programs tab " +
+    "and send them the text to paste in.</p></div></div>" +
+    "</div>"
+  );
+}
+
+function sessionHistory(cap) {
+  const rows = [];
+  Object.keys(S.log.sessions || {}).forEach(function (wk) {
+    Object.keys(S.log.sessions[wk]).forEach(function (k) {
+      const rec = S.log.sessions[wk][k];
+      if (!rec || !rec.at) return;
+      const m = k.match(/^(.+):(d\d+)$/);
+      const pid = m ? m[1] : "";
+      const p = S.programs.find(function (x) { return x.id === pid; });
+      let pn = rec.pn, dn = rec.dn, gg = rec.gg;
+      if (pn == null) {
+        /* older records carry no names; resolve what still exists */
+        pn = p ? p.title : "(deleted program)";
+        gg = p && isSingle(p) ? 1 : 0;
+        if (p && !gg && m) {
+          const dp2 = parseProgram(p.raw);
+          const di = +m[2].slice(1);
+          const dday = dp2.days[di];
+          dn = dday ? dday.title || dday.name : "";
+        } else dn = "";
+      } else if (!p && !pn) pn = "(deleted program)";
+      let dISO = rec.d;
+      if (!dISO) {
+        /* older records: pin weekday-named program days to their true date */
+        let wd = -1;
+        if (!gg && p && m) {
+          const dpd = parseProgram(p.raw).days[+m[2].slice(1)];
+          if (dpd) wd = WDAYS.indexOf(String(dpd.name || "").toLowerCase());
+        }
+        if (wd >= 0) {
+          const md = new Date(wk + "T00:00:00");
+          md.setDate(md.getDate() + wd);
+          dISO = ymd(md);
+        } else dISO = ymd(new Date(rec.at));
       }
-      if (sNow.d || repsBad(sNow)) render();
-    }, 700);
-    return;
-  }
-  if (k === "fix-sets" || k === "fix-reps") {
-    S.pendingFix = S.pendingFix || {};
-    const key = nn(el.dataset.n);
-    S.pendingFix[key] = S.pendingFix[key] || {};
-    S.pendingFix[key][k === "fix-sets" ? "sets" : "reps"] = el.value.trim();
-    delete S.pendingFix[key].skip;
-    return;
-  }
-  if (k === "b-title") {
-    S.build.title = el.value;
-    return;
-  }
-  if (k === "b-weeks") {
-    S.build.weeks = parseInt(el.value, 10) || 0;
-    return;
-  }
-  if (k === "b-daytitle") {
-    S.build.days[+el.dataset.i].title = el.value;
-    return;
-  }
-  if (k === "b-exname" || k === "b-exsets" || k === "b-exreps") {
-    const x = S.build.days[+el.dataset.d].items[+el.dataset.i];
-    x[k === "b-exname" ? "name" : k === "b-exsets" ? "sets" : "reps"] = el.value;
-    return;
-  }
-  if (k === "bodyw") {
-    logBody(todayISO(), el.value);
-    return;
-  }
-  if (k === "accent") {
-    applyAccent(el.value);
-    return;
-  }
-  if (k === "pb-search") {
-    S.pbQuery = el.value;
-    render();
-    return;
-  }
-  if (k === "ax-name" || k === "ax-sets" || k === "ax-reps") {
-    S.sheet[k === "ax-name" ? "name" : k === "ax-sets" ? "sets" : "reps"] = el.value;
-    if (k === "ax-name") nameSuggestRefresh();
-    return;
-  }
-  if (k === "swap-name") {
-    S.sheet.name = el.value;
-    nameSuggestRefresh();
-    return;
-  }
-  if (k === "pb-name" || k === "pb-w" || k === "pb-r") {
-    S.sheet[k === "pb-name" ? "name" : k === "pb-w" ? "w" : "r"] = el.value;
-    if (k === "pb-name" && S.sheet.catAuto) {
-      const guess = guessCat(el.value, dayTitleIndex()[nn(el.value)]);
-      if (guess !== S.sheet.cat) {
-        S.sheet.cat = guess;
-        render();
-      }
-    }
-    return;
-  }
-  if (k === "restore-text") {
-    S.restoreText = el.value;
-    return;
-  }
+      rows.push({ at: rec.at, d: dISO, sets: rec.sets, volume: rec.volume, pn: pn, dn: dn, gg: gg, wk: wk, k: k });
+    });
+  });
+  rows.sort(function (a, b) { return a.d === b.d ? (a.at < b.at ? 1 : -1) : a.d < b.d ? 1 : -1; });
+  return rows.slice(0, cap || 30);
+}
+
+function vProfile() {
+  const page = S.page;
+  if (page === "style") return vStyle();
+  if (page === "settings") return vSettingsPage();
+  if (page === "pbs") return vPBs();
+  if (page === "measures") return vMeasures();
+  if (page === "calendar") return vCalendar();
+  const all = sessionHistory(100000);
+  const wk = wkNow();
+  /* Session records are filed under a week key derived from the active
+     program's anchor, so a grab-and-go carrying its own start date lands in a
+     different bucket and the count changes with whichever program happens to
+     be selected. Count by date across every bucket instead. */
+  const wkA = ymd(anchorOf(S.weekOff));
+  const wkB = (function () {
+    const e = anchorOf(S.weekOff);
+    e.setDate(e.getDate() + 6);
+    return ymd(e);
+  })();
+  let thisWk = 0;
+  Object.keys(S.log.sessions || {}).forEach(function (bk) {
+    const bucket = S.log.sessions[bk] || {};
+    Object.keys(bucket).forEach(function (k) {
+      /* records written before the date stamp fall back to their bucket */
+      const d = bucket[k].d || bk;
+      if (d >= wkA && d <= wkB) thisWk++;
+    });
+  });
+  const tile = function (p2, label, icon, sub) {
+    return (
+      '<button class="tile" data-act="page" data-p="' + p2 + '">' + ICON[icon] +
+      '<span class="tl"><span>' + label + "</span>" + (sub ? "<small>" + sub + "</small>" : "") + "</span></button>"
+    );
+  };
+  return (
+    '<div class="wrap pad">' +
+    '<div class="block"><div class="row">' +
+    '<div class="grow"><div class="bigno tnum">' + all.length + "</div>" +
+    '<div class="eyebrow" style="margin-top:4px">' + (all.length === 1 ? "session" : "sessions") + " logged</div></div>" +
+    '<div style="text-align:right"><div class="bigno tnum">' + thisWk + "</div>" +
+    '<div class="eyebrow" style="margin-top:4px">this week</div></div>' +
+    "</div></div>" +
+    '<button class="bkline" data-act="page" data-p="settings">' +
+    (daysSinceBackup() === null
+      ? "No backup yet &mdash; your log lives only on this phone"
+      : daysSinceBackup() === 0
+        ? "Backed up today"

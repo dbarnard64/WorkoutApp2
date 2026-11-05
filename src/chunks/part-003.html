@@ -1,1031 +1,332 @@
-    o.stop(ctx.currentTime + 0.75);
-  } catch (e) {
-    /* silent */
-  }
-}
+  display:flex;align-items:center;justify-content:center;gap:8px;width:100%}
+.hist{margin-top:8px}
+.hist .h{margin-top:7px}
+.hist .w{color:var(--mute);font-size:12px}
+.hist .s{color:var(--chalk);font-size:13px}
+.sec{padding-top:12px}
+.note{color:var(--mute);font-size:13px;line-height:1.5;border-left:2px solid var(--line);padding-left:10px}
+.finish{height:54px;border-radius:16px;background:var(--brass);border:1px solid var(--brass);color:var(--onAccent);
+  font-family:var(--display);font-size:17px;letter-spacing:.06em;text-transform:uppercase;
+  display:flex;align-items:center;justify-content:center;gap:8px;margin-top:8px;width:100%}
+.finish.logged{background:var(--panel);border-color:var(--brassDim);color:var(--brass)}
 
-/* ------------------------------------------------------------------ */
-/*  Plate maths                                                       */
-/* ------------------------------------------------------------------ */
+/* generic blocks */
+.pad{padding:20px 20px 160px}
+.block{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
+.block.on{border-color:var(--brassDim)}
+.row{display:flex;align-items:center;gap:12px;min-width:0}
+.grow{flex:1;min-width:0}
+.mt{margin-top:12px}.mt2{margin-top:20px}.mt3{margin-top:32px}
+.ttl{font-family:var(--display);font-size:19px;text-transform:uppercase;line-height:1.1;
+  overflow-wrap:anywhere}
+.ttl.on{color:var(--brass)}
+.sub{color:var(--mute);font-size:12px;margin-top:2px}
+.dash{height:52px;border:1px dashed var(--line);border-radius:16px;color:var(--brass);
+  font-family:var(--display);font-size:16px;letter-spacing:.06em;text-transform:uppercase;
+  display:flex;align-items:center;justify-content:center;gap:8px;width:100%}
+.datefld{min-width:0;max-width:160px;height:34px;padding:0 8px;border-radius:8px;background:var(--panel2);border:1px solid var(--line);
+  color:var(--chalk);font-size:13px;color-scheme:dark}
+.iconbtn{color:var(--mute);width:44px;height:44px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.libtop{position:sticky;top:0;z-index:5;background:var(--ink);margin:-20px -20px 0;
+  padding:calc(16px + env(safe-area-inset-top)) 20px 12px;border-bottom:1px solid var(--line)}
+.libq{height:44px;margin-top:0;gap:8px;padding:0 12px}
+.libq svg{width:18px;height:18px;stroke:var(--mute);fill:none;stroke-width:2;flex:none}
+.libq input{font-size:16px}
+.libq input::placeholder{color:var(--faint);font-style:normal;opacity:1}
+.libq input::-webkit-search-cancel-button{filter:grayscale(1) brightness(1.4)}
+.notes h2{font-family:var(--display);font-size:22px;letter-spacing:.02em;text-transform:uppercase;margin:0 0 8px}
+.notes p{color:var(--mute);font-size:14px;line-height:1.55;margin:6px 0 0}
+.notes p.b{color:var(--chalk);font-weight:600}
+.notes .grp{margin-bottom:24px}
+.toggle{width:50px;height:30px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);
+  position:relative;flex-shrink:0}
+.toggle i{position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:999px;background:var(--mute);
+  transition:left .14s ease}
+.toggle.on{background:var(--brass)}
+.toggle.on i{left:23px;background:var(--onAccent)}
+.segs{display:flex;gap:8px;margin-top:16px}
+.seg{flex:1;height:44px;border-radius:12px;background:var(--panel2);color:var(--mute);
+  font-family:var(--display);font-size:15px;display:flex;align-items:center;justify-content:center}
+.seg.on{background:var(--brass);color:var(--onAccent)}
 
-/* ------------------------------------------------------------------ */
-/*  Session maths                                                     */
-/* ------------------------------------------------------------------ */
+/* nav + bars */
+.dock{position:fixed;left:16px;right:16px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:20;
+  max-width:560px;margin:0 auto;display:flex;padding:6px;border-radius:34px;touch-action:none;
+  background:color-mix(in srgb, var(--panel) 55%, transparent);
+  -webkit-backdrop-filter:blur(22px) saturate(1.7);backdrop-filter:blur(22px) saturate(1.7);
+  border:1px solid color-mix(in srgb, var(--chalk) 10%, transparent);
+  box-shadow:0 14px 34px rgba(0,0,0,.45), inset 0 1px 0 color-mix(in srgb, var(--chalk) 7%, transparent)}
+.dock.hide{display:none}
+.dock button{position:relative;z-index:2;flex:1 1 0;min-width:0;height:56px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:3px;color:var(--faint);text-align:center;padding:0 2px}
+.dock button.on{color:var(--onAccent)}
+.dock button i{display:flex;flex-direction:column;align-items:center;gap:3px;font-style:normal;
+  transition:transform .3s cubic-bezier(.22,1.3,.36,1);will-change:transform}
+.dock span{font-family:var(--display);font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.dock svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2}
+.dock button.on svg{stroke-width:2.6}
+.dock .lens{position:absolute;top:6px;bottom:6px;left:6px;z-index:1;border-radius:28px;
+  background:var(--brass);border:1px solid var(--brass);
+  box-shadow:inset 0 1px 0 color-mix(in srgb, #fff 25%, transparent), 0 4px 14px rgba(0,0,0,.35);
+  transition:transform .45s cubic-bezier(.22,1.45,.36,1);will-change:transform}
+.timerbar{position:fixed;left:0;right:0;bottom:calc(92px + env(safe-area-inset-bottom));padding:0 20px;z-index:19}
+.timerbar .in{background:var(--panel2);border:1px solid var(--line);border-radius:16px;padding:12px 16px;
+  display:flex;align-items:center;gap:12px}
+.timerbar.ding .in{background:var(--brass);border-color:var(--brass);color:var(--onAccent)}
+.timerbar .t{font-family:var(--display);font-size:24px;min-width:58px}
+.timerbar .add{border:1px solid var(--line);border-radius:8px;padding:4px 12px;font-size:13px;color:var(--mute)}
+.timerbar.ding .add{border-color:var(--onAccent);color:var(--onAccent)}
+.timerbar .x{margin-left:auto;font-size:20px;color:var(--mute)}
+.timerbar.ding .x{color:var(--onAccent)}
+.undobar{position:fixed;left:0;right:0;bottom:calc(92px + env(safe-area-inset-bottom));padding:0 20px;z-index:20}
+.undobar.stacked{bottom:calc(152px + env(safe-area-inset-bottom))}
+.undobar .in{background:var(--panel2);border:1px solid var(--line);border-radius:16px;padding:12px 16px;
+  display:flex;align-items:center;gap:12px;font-size:14px;color:var(--mute);
+  box-shadow:0 4px 14px rgba(0,0,0,.35)}
+.undobar .undo{border:1px solid var(--brassDim);border-radius:8px;padding:6px 16px;font-size:14px;
+  font-weight:600;color:var(--brass)}
+.undobar .x{font-size:20px;color:var(--faint);padding:0 2px}
 
-/* weights typed with a comma decimal separator must still be numbers */
-const numOf = (v) => parseFloat(String(v == null ? "" : v).replace(",", "."));
+/* sheets */
+.scrim{position:fixed;inset:0;background:rgba(8,6,5,.74);z-index:40;display:flex;align-items:flex-end}
+.sheet{width:100%;max-height:88vh;overflow-y:auto;background:var(--panel);border-top:1px solid var(--line);
+  border-radius:16px 16px 0 0;padding-bottom:calc(20px + env(safe-area-inset-bottom))}
+.sheet-hd{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 20px 12px}
+.sheet-hd h2{font-family:var(--display);font-size:26px;line-height:1.05;margin:4px 0 0;text-transform:uppercase}
+.sheet-body{padding:0 20px}
+.stats{display:flex;gap:12px}
+.stat{flex:1;background:var(--ink);border:1px solid var(--line);border-radius:16px;padding:12px}
+.stat b{font-family:var(--display);font-size:26px;color:var(--brass);line-height:1;display:block;font-weight:400}
+.sumline{display:flex;align-items:center;gap:12px;background:var(--ink);border-radius:12px;padding:8px 12px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.pchip{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:12px;
+  color:var(--mute)}
+.pchip.on{background:var(--brass);border-color:var(--brass);color:var(--onAccent)}
 
-/* The key an exercise is filed under, for history, bests and slot repair.
-   The same lift gets written a dozen ways, so word order and punctuation are
-   ignored: "High-to-Low Cable Fly" and "Cable Fly (High to Low)" are one
-   exercise. Direction words keep their order, so high-to-low and low-to-high
-   stay apart. */
-const NN_SYN = {
-  db: "dumbbell", dbs: "dumbbell", dumbell: "dumbbell", dumbells: "dumbbell",
-  bb: "barbell", kb: "kettlebell", kbs: "kettlebell", ez: "ezbar",
-  bw: "bodyweight", ohp: "overheadpress", rdl: "romaniandeadlift",
-  sldl: "stifflegdeadlift", ohe: "overheadextension",
-  flye: "fly", flyes: "fly", flies: "fly", flys: "fly",
-  ext: "extension", exts: "extension", calves: "calf", lats: "lat",
-  biceps: "bicep", triceps: "tricep"
-};
-const NN_DROP = { the: 1, a: 1, an: 1, and: 1, to: 1, of: 1, with: 1, on: 1,
-  for: 1, or: 1, from: 1, into: 1 };
-/* order carries meaning only for these; incline, rear, wide and the rest are
-   adjectives whose position in the name says nothing */
-const NN_DIR = { high: 1, low: 1, up: 1, down: 1, top: 1, bottom: 1 };
-function nnStem(t) {
-  if (NN_SYN[t]) t = NN_SYN[t];
-  if (t.length > 3 && t.charAt(t.length - 1) === "s" && t.slice(-2) !== "ss")
-    t = t.slice(0, -1);
-  if (t.length > 3 && t.charAt(t.length - 1) === "e") t = t.slice(0, -1);
-  return t;
-}
-const nnFlat = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-/* Build 2 of the key, frozen: only the name-key migration uses it, to find
-   which stored rows were filed under it. Never change this function. */
-const nnV2 = (name) => {
-  const toks = [];
-  const dir = [];
-  String(name == null ? "" : name).toLowerCase().split(/[^a-z0-9]+/).forEach(function (t) {
-    if (!t || NN_DROP[t]) return;
-    if (NN_DIR[t]) dir.push(t);
-    toks.push(nnStem(t));
-  });
-  if (!toks.length) return nnFlat(name);
-  toks.sort();
-  return toks.join("-") + (dir.length > 1 ? "~" + dir.join("") : "");
-};
-/* Build 3 also hears the ways a lift gets split or abbreviated: "Pull Down"
-   is "Pulldown", "1-Arm" is "Single-Arm", "RDL" is "Romanian Deadlift". */
-const NN_EXPAND = { rdl: "romanian deadlift", sldl: "stiff leg deadlift", ohp: "overhead press",
-  ohe: "overhead extension", sa: "single arm", legged: "leg" };
-const NN_JOIN = { pull: { down: 1, up: 1, over: 1, through: 1 }, push: { down: 1, up: 1 },
-  chin: { up: 1 }, sit: { up: 1 }, step: { up: 1 }, kick: { back: 1 }, cross: { over: 1 },
-  dead: { lift: 1 }, t: { bar: 1 }, v: { bar: 1 }, ez: { bar: 1 } };
-const NN_ONE = { one: 1, "1": 1 };
-const NN_LIMB = { arm: 1, leg: 1, hand: 1 };
-function nnWords(name) {
-  const raw = [];
-  String(name == null ? "" : name).toLowerCase().split(/[^a-z0-9]+/).forEach(function (t) {
-    if (!t) return;
-    if (NN_EXPAND[t]) NN_EXPAND[t].split(" ").forEach(function (x) { raw.push(x); });
-    else raw.push(t);
-  });
-  const out = [];
-  for (let i = 0; i < raw.length; i++) {
-    const t = raw[i];
-    const nx = raw[i + 1];
-    const base = nx && nx.length > 2 && nx.slice(-1) === "s" ? nx.slice(0, -1) : nx;
-    if (nx && NN_JOIN[t] && NN_JOIN[t][base]) { out.push(t + nx); i++; continue; }
-    if (nx && NN_ONE[t] && NN_LIMB[base]) { out.push("single"); continue; }
-    out.push(t);
-  }
-  return out;
-}
-const nn = (name) => {
-  const toks = [];
-  const dir = [];
-  nnWords(name).forEach(function (t) {
-    if (NN_DROP[t]) return;
-    if (NN_DIR[t]) dir.push(t);
-    toks.push(nnStem(t));
-  });
-  if (!toks.length) return nnFlat(name);
-  toks.sort();
-  return toks.join("-") + (dir.length > 1 ? "~" + dir.join("") : "");
-};
-const setIdx = (e) => Object.keys(e || {}).filter((k) => /^\d+$/.test(k));
+/* paste screen */
+.paste{min-height:100vh;display:flex;flex-direction:column}
+.paste .top{padding:24px 20px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:12px;padding-top:calc(24px + env(safe-area-inset-top))}
+.paste h1{font-family:var(--display);font-size:30px;line-height:1;margin:6px 0 0;text-transform:uppercase}
+.paste p{color:var(--mute);font-size:13px;margin:8px 0 0;line-height:1.5}
+.paste .mid{flex:1;padding:16px 20px}
+.paste textarea{width:100%;min-height:240px;background:var(--panel);border:1px solid var(--line);
+  border-radius:16px;padding:16px;font-size:15px;line-height:1.5;resize:vertical}
+.paste .foot{padding:16px 20px;border-top:1px solid var(--line);display:flex;gap:12px;
+  padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+.btn-primary{flex:1;height:50px;border-radius:12px;background:var(--brass);color:var(--onAccent);
+  font-family:var(--display);font-size:17px;letter-spacing:.06em;text-transform:uppercase;
+  display:flex;align-items:center;justify-content:center}
+.btn-primary[disabled]{background:var(--panel2);color:var(--faint)}
+.btn-ghost{height:50px;padding:0 16px;border:1px solid var(--line);border-radius:12px;color:var(--mute);
+  font-size:14px;display:flex;align-items:center;justify-content:center}
+.swatches{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.sw{border:1px solid var(--line);border-radius:14px;padding:12px;background:var(--panel)}
+.sw.on{border-color:var(--brass)}
+.sw b{font-family:var(--display);font-size:15px;font-weight:400;text-transform:uppercase;display:block}
+.sw .dots{display:flex;gap:5px;margin-top:8px}
+.sw .dots i{width:16px;height:16px;border-radius:999px;display:block;border:1px solid rgba(255,255,255,.12)}
+.rev{background:var(--ink);border:1px solid var(--line);border-radius:14px;padding:12px;margin-top:10px}
+.rev .nm{font-size:15px;font-weight:600}
+.rev .where{color:var(--faint);font-size:12px;margin-top:2px}
+.rev .flds{display:flex;gap:8px;align-items:center;margin-top:10px}
+.rev .flds .fld{flex:1}
+.bex{background:var(--ink);border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:10px}
+select.datefld{-webkit-appearance:none;appearance:none;height:36px;padding:0 8px;max-width:none}
+.nag{display:flex;align-items:center;gap:10px;margin:12px 20px 0;padding:10px 12px;border-radius:12px;
+  background:var(--panel2);border:1px solid var(--brassDim);font-size:13px;color:var(--chalk)}
+.nag button{color:var(--brass);font-size:13px;white-space:nowrap}
+.nag button.x{color:var(--faint);font-size:18px}
+.chart{background:var(--ink);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px}
+.bigno{font-family:var(--display);font-size:34px;line-height:1;color:var(--brass)}
+.pblist{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.cats{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.catgrp{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.catgrp.on{border-color:var(--brassDim)}
+.cathead{display:flex;align-items:center;gap:10px;width:100%;padding:15px 16px;text-align:left;
+  font-family:var(--display);font-size:17px;text-transform:uppercase;letter-spacing:.06em;color:var(--chalk)}
+.catgrp.on .cathead{color:var(--brass)}
+.cathead .grow{flex:1;min-width:0}
+.cathead .sub{color:var(--faint);font-size:12px;white-space:nowrap}
+.catgrp .pblist{margin:0;padding:0 10px 10px}
+.caret{color:var(--faint);font-size:20px;line-height:1;display:inline-block;transition:transform .15s ease}
+.caret.on{transform:rotate(90deg);color:var(--brass)}
+.pbgrp.open{border-color:var(--brassDim)}
+.pbgrp b{font-family:var(--display);font-size:16px;font-weight:400;text-transform:uppercase;
+  letter-spacing:.08em;flex:1}
+.pbgrp.open b{color:var(--brass)}
+.pbgrp .n{font-size:13px;color:var(--faint)}
+.pbgrp .cv{color:var(--faint);font-size:13px;width:14px;text-align:center}
+.pbrow{display:flex;align-items:center;gap:12px;background:var(--ink);border-radius:12px;padding:10px 12px}
+.copylast{width:100%;height:44px;border:1px dashed var(--line);border-radius:12px;color:var(--brass);
+  font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:4px}
+.nudge{color:var(--brass);font-size:12px;margin-top:3px}
+.badge.pb{background:var(--brass);border-color:var(--brass);color:var(--onAccent);font-weight:600}
+.ro{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);
+  border-radius:12px;padding:10px 12px}
+.ro .lbl2{flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ro .lbl2.s{font-family:var(--display);text-transform:uppercase;letter-spacing:.12em;font-size:12px;color:var(--brass)}
+.ro .lbl2.n{color:var(--mute);font-size:13px}
+.ro .mv{width:34px;height:34px;border:1px solid var(--line);border-radius:8px;display:flex;
+  align-items:center;justify-content:center;color:var(--mute);font-size:15px;flex-shrink:0}
+.best{color:var(--mute);font-size:12px;margin-top:6px}
+.best b{color:var(--brass);font-weight:400}
+.warn{border-left:2px solid var(--brass);padding-left:10px;color:var(--mute);font-size:13px;line-height:1.5}
+.colorrow{display:flex;align-items:center;gap:12px;margin-top:12px}
+input[type=color]{width:46px;height:34px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);padding:2px}
+.link{color:var(--brass);font-size:14px;text-decoration:underline}
+.center{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;
+  text-align:center;padding:0 32px;gap:16px}
 
-/* ------------------------------------------------------------------ */
-/*  Program weeks                                                     */
-/* ------------------------------------------------------------------ */
+/* ===== Ember layer ===== */
+.hdr:has(+ .wkbar){border-bottom-color:transparent}
+.prog-btn span:first-child{font-family:var(--body);letter-spacing:0;text-transform:none;font-size:16px;font-weight:600;color:var(--chalk)}
+.prog-btn span:last-child{color:var(--mute)}
+.hdr .chip,.hdr .chip.on{background:var(--panel2);border-color:transparent;color:var(--brass);height:36px}
+.wkbar{border:0;padding:12px 20px 0}
+.wkbar .wknav{margin:0;gap:0}
+.wkbar .lbl{order:-1;flex:1;text-align:left;font-family:var(--display);font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+.wkbar .arrow{height:36px;color:var(--mute)}
+.wkbar .arrow:last-child{margin-right:-12px}
+.strip{border-bottom:0;padding-top:6px;padding-bottom:4px}
+.pill{height:64px;gap:2px;border:0;border-radius:16px;background:var(--panel);padding:0}
+.pill.today:not(.on){box-shadow:inset 0 0 0 1px var(--brassDim)}
+.pill .pwd{font-family:var(--body);font-size:10px;font-weight:600;letter-spacing:.08em;color:var(--faint)}
+.pill .pnum{font-family:var(--display);font-size:20px;line-height:1;color:var(--chalk);letter-spacing:.02em}
+.pill.on{background:var(--brass)}
+.pill.on .pwd{color:color-mix(in srgb, var(--onAccent) 70%, transparent)}
+.pill.on .pnum{color:var(--onAccent)}
+.pdot{display:block;width:5px;height:5px;border-radius:3px;margin-top:3px;background:transparent}
+.pdot.done{background:var(--done)}
+.pdot.part{background:var(--brass)}
+.pill.on .pdot.done,.pill.on .pdot.part{background:var(--onAccent)}
+.dayhead{border:0;border-radius:24px;box-shadow:inset 0 1px 0 color-mix(in srgb, var(--chalk) 4%, transparent)}
+.dayhead h1{font-size:36px;line-height:.92}
+.dayhead .dhsub{margin-top:8px;white-space:normal;margin-right:0}
+.dayhead .prow{gap:8px;margin:16px 0 0}
+.upnext{flex:1;min-width:0;height:48px;border-radius:14px;background:var(--brass);color:var(--onAccent);
+  display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 16px}
+.upnext span{display:flex;flex-direction:column;min-width:0}
+.upnext small{font-size:10px;font-weight:600;letter-spacing:.12em;opacity:.7}
+.upnext b{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.upnext svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.6;flex:none}
+.dmore{flex:none;width:48px;height:48px;border-radius:14px;background:var(--panel2);color:var(--mute);display:flex;align-items:center;justify-content:center}
+.dmore svg,.pmore svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2.6}
+.dmore.on,.pmore.on{color:var(--brass)}
+.dmenu{display:flex;flex-direction:column;margin-top:8px;border-radius:14px;background:var(--panel2);overflow:hidden}
+.dmenu button{height:48px;padding:0 16px;font-size:14px;border-top:1px solid var(--line)}
+.dmenu button:first-child{border-top:0}
+.danger{color:var(--miss)!important}
+.ring circle.on{stroke:var(--done)}
+.card{border-color:transparent;position:relative;scroll-margin-top:16px;border-radius:18px}
+.card:has(.detail){border-color:var(--brassDim);border-radius:24px}
+.card.done{border-color:transparent}
+.card.done .card-name,.card.done .count{color:var(--done)}
+.idx{width:32px;height:32px;border-radius:10px}
+.card:has(.detail) .idx{background:var(--brass);color:var(--onAccent)}
+.card.done .idx,.card.done:has(.detail) .idx{border-radius:50%;background:color-mix(in srgb, var(--done) 16%, transparent);color:var(--done)}
+.idx.part{background:color-mix(in srgb, var(--brass) 14%, transparent);box-shadow:none;color:var(--brass)}
+.card:not(:has(.detail)) .card-top{min-height:62px;align-items:center;padding:8px 14px 8px 12px}
+.card:not(:has(.detail)) .card-top .meta{margin-top:2px}
+.cprog{position:absolute;left:0;right:0;bottom:0;height:3px;pointer-events:none}
+.cprog i{display:block;height:100%;background:var(--brass)}
+.card.done .cprog i{background:var(--done)}
+.card:has(.detail) .cprog{display:none}
+.disc.on{background:var(--done);border-color:var(--done);color:var(--ink)}
+.setrow:has(> .disc.on){background:color-mix(in srgb, var(--done) 8%, transparent);box-shadow:0 0 0 3px color-mix(in srgb, var(--done) 8%, transparent)}
+.detail{background:transparent;border-top:0;padding-top:4px}
+.sethead{display:flex;gap:8px;font-size:10px;font-weight:600;letter-spacing:.12em;color:var(--faint);text-transform:uppercase}
+.sethead span:nth-child(1){width:44px;text-align:center;flex:none}
+.sethead span:nth-child(2),.sethead span:nth-child(3){flex:1;padding-left:8px}
+.sethead span:nth-child(4){width:54px;flex:none}
+.fld{border:0;background:var(--panel2)}
+.setrow:not(.drop) .fld em{display:none}
+.droppill{border:0;background:transparent;box-shadow:inset 0 0 0 1px var(--line)}
+.card:has(.detail) .last,.card:has(.detail) .nudge{display:inline-flex;align-items:center;height:26px;padding:0 10px;
+  border-radius:9px;background:var(--panel2);color:var(--mute);font-size:12px;margin:8px 6px 0 0}
+.card:has(.detail) .nudge{background:color-mix(in srgb, var(--brass) 12%, transparent);color:var(--brass)}
+.hdr.tabhead{border-bottom:0;padding-bottom:4px}
+.tabttl{font-family:var(--display);font-size:32px;line-height:1;margin:0;text-transform:uppercase;letter-spacing:.01em}
+.block{border-color:transparent;border-radius:22px}
+.block.on{border-color:var(--brassDim)}
+.pcard .ttl{font-family:var(--body);text-transform:none;font-size:17px;font-weight:700;line-height:1.25;color:var(--chalk)}
+.atag{display:inline-flex;height:22px;padding:0 8px;border-radius:7px;align-items:center;margin-bottom:8px;
+  background:color-mix(in srgb, var(--brass) 14%, transparent);color:var(--brass);font-size:11px;font-weight:700;letter-spacing:.06em}
+.pmore{margin:-8px -10px 0 0}
+.pmenu{display:flex;gap:8px;margin-top:12px}
+.pmenu button{flex:1;height:44px;border-radius:12px;background:var(--panel2);font-size:13px;font-weight:600;text-align:center}
+.pprog{height:6px;border-radius:3px;background:var(--panel2);overflow:hidden;margin-top:14px}
+.pprog i{display:block;height:100%;background:var(--brass)}
+.needs{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:20px;background:color-mix(in srgb, var(--brass) 7%, var(--panel))}
+.needs b{display:block;font-size:14px;color:var(--brass)}
+.needs span{display:block;font-size:12px;color:var(--mute);margin-top:2px}
+.btn-amber{flex:none;height:40px;padding:0 14px;border-radius:12px;background:var(--brass);color:var(--onAccent);font-weight:700;font-size:13px}
+.libtop{border-bottom:0;box-shadow:0 1px 0 var(--line)}
+.libtop .dash{border:0;background:var(--panel2);height:44px;border-radius:14px;color:var(--chalk);font-family:var(--body);
+  text-transform:none;letter-spacing:0;font-size:14px;font-weight:600}
 
-function mondayOfISO(iso) {
-  const d = new Date(iso + "T00:00:00");
-  if (isNaN(d.getTime())) return null;
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
+/* ===== Ember v2 layer ===== */
+.prog-btn{display:grid;grid-template-columns:auto auto;align-items:center;justify-content:start;column-gap:6px;text-align:left}
+.prog-btn small{grid-column:1 / -1;font-family:var(--display);font-weight:600;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+.hdr .chip,.hdr .chip.on{height:44px;padding:0 14px;border-radius:14px;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:2px}
+.hdr .chip b{font-family:var(--display);font-weight:800;font-size:18px;line-height:1;letter-spacing:.02em;color:var(--brass)}
+.hdr .chip small{font-family:var(--body);font-size:10px;letter-spacing:0;color:var(--faint);text-transform:none}
+.pill{height:68px;gap:1px}
+.pill .pwd{font-size:9px;letter-spacing:.1em}
+.pill .pnum{font-weight:800;font-size:26px}
+.pcnt{font-size:9px;margin-top:2px;color:var(--faint);opacity:.7;letter-spacing:.02em}
+.pill.on .pcnt{color:color-mix(in srgb, var(--onAccent) 70%, transparent)}
+.pdot{display:none}
+.dhtop{align-items:flex-start}
+.dhside{display:flex;flex-direction:column;align-items:flex-end;gap:10px;flex:none}
+.dhside .dmore{width:44px;height:44px}
+.dayhead h1{font-size:44px;line-height:.88;font-weight:800}
+.dayhead .dhsub{margin-top:8px}
+.resth1{color:var(--mute)!important;font-size:64px!important}
+.ring b{font-weight:800;font-size:22px}
+.ring span{font-family:var(--display);font-weight:600;font-size:10px}
+.ring circle.on{stroke:var(--brass)}
+.nextses{display:flex;align-items:center;gap:12px;width:100%;margin-top:16px;padding-top:14px;border-top:1px solid var(--line);text-align:left}
+.nextses small{display:block;font-family:var(--display);font-weight:600;font-size:12px;letter-spacing:.16em;color:var(--faint)}
+.nextses b{display:block;font-family:var(--display);font-weight:800;font-size:24px;line-height:1;text-transform:uppercase;margin-top:2px}
+.nextses span span,.nextses .grow > span{display:block;font-size:12px;color:var(--mute);margin-top:4px}
+.nextses svg{width:18px;height:18px;stroke:var(--faint);fill:none;stroke-width:2.4;flex:none}
+.sec .eyebrow{font-weight:600;font-size:13px;letter-spacing:.16em;color:var(--brass)}
+/* done = dimmed, never a second colour */
+.disc.on{background:var(--brass);border-color:var(--brass);color:var(--onAccent)}
+.setrow:has(> .disc.on){background:color-mix(in srgb, var(--brass) 8%, transparent);box-shadow:0 0 0 3px color-mix(in srgb, var(--brass) 8%, transparent)}
+.card.done .card-name{color:var(--faint)}
+.card.done .count{color:var(--faint)}
+.card.done .idx,.card.done:has(.detail) .idx{border-radius:50%;background:var(--panel2);color:var(--faint)}
+.cprog{display:none}
+.badge.pb{background:color-mix(in srgb, var(--brass) 16%, transparent);border:0;color:var(--brass);font-family:var(--display);font-weight:800;font-size:12px;letter-spacing:.08em;border-radius:6px;padding:2px 7px}
+.card:has(.detail) .card-name{font-family:var(--display);font-weight:800;font-size:30px;line-height:.92;text-transform:uppercase}
+.card:has(.detail) .count{font-family:var(--display);font-weight:800;font-size:20px;color:var(--brass)}
+.idx{font-weight:800;font-size:14px}
+.setrow .fld input{font-family:var(--display);font-weight:800;font-size:22px;text-align:center}
+.sethead{font-family:var(--display);font-weight:600;font-size:11px}
+.dock button{font-family:var(--display);font-size:12px;letter-spacing:.1em;text-transform:uppercase}
+.dock button.on{font-weight:800}
+.tabttl{font-weight:800;font-size:44px;line-height:.88}
+.pprog{display:none}
+.pcard .ttl{font-family:var(--display);font-weight:800;font-size:26px;line-height:.95;text-transform:uppercase}
+.atag{font-family:var(--display);font-weight:800;font-size:12px;letter-spacing:.08em}
+.btn-amber{font-family:var(--display);font-weight:800;font-size:15px;letter-spacing:.06em}
+.swatches{grid-template-columns:repeat(3, minmax(0, 1fr));gap:8px}
+.sw{border:0;border-radius:18px;background:var(--panel);padding:12px}
+.sw.on{box-shadow:inset 0 0 0 1.5px var(--brass)}
+.sw b{font-family:var(--body);font-weight:600;font-size:13px;text-transform:none}
+.sw .dots i{width:22px;height:22px}
+.sw .dots i:not(:nth-child(3)){display:none}
+.eyebrow{font-weight:600}
+.block{border:0}
 
-function programWeek(startISO, weekOff, length, anchored) {
-  if (!startISO) return null;
-  const s = anchored ? new Date(startISO + "T00:00:00") : mondayOfISO(startISO);
-  if (!s || isNaN(s.getTime())) return null;
-  let cur;
-  if (anchored) {
-    const t = new Date();
-    t.setHours(0, 0, 0, 0);
-    cur = new Date(s);
-    cur.setDate(cur.getDate() + (Math.floor(Math.round((t - s) / 86400000) / 7) + weekOff) * 7);
-  } else {
-    cur = mondayOf(weekOff);
-  }
-  const n = Math.round((cur - s) / 604800000) + 1;
-  const cycling = length > 0 && n > length;
-  return {
-    n,
-    eff: cycling ? ((n - 1) % length) + 1 : n,
-    round: cycling ? Math.floor((n - 1) / length) + 1 : 1,
-    length,
-    before: n < 1,
-    startMonday: s,
-  };
-}
+.prog-btn span:first-of-type{font-family:var(--body);font-size:16px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--chalk);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:230px}
+.prog-btn span:last-of-type{color:var(--mute)}
+.tiles{grid-template-columns:1fr;gap:8px}
+.tile,.tile.wide{border:0;border-radius:18px;height:62px;margin-top:0;justify-content:flex-start;padding:0 14px;font-size:15px;font-weight:600}
+.tile.wide{margin-top:8px}
+.tile svg{width:18px;height:18px;padding:9px;border-radius:12px;background:var(--panel2);box-sizing:content-box}
+.tile::after{content:"\203A";margin-left:auto;color:var(--faint);font-size:22px;font-weight:400}
+.bigno{font-weight:800;font-size:44px}
 
-function itemActive(it, eff) {
-  if (eff == null) return true;
-  if (it.parity) return it.parity === "odd" ? eff % 2 === 1 : eff % 2 === 0;
-  if (it.weeks) return it.weeks.indexOf(eff) >= 0;
-  return true;
-}
-
-function weekRuleLabel(it) {
-  if (it.parity) return it.parity === "odd" ? "Odd weeks" : "Even weeks";
-  if (it.weeks) return "Weeks " + it.weeks.join(", ");
-  return null;
-}
-
-/* Per-day adjustments live on that week's log entry, so they never touch the
-   program or any other week. "n" stays the program's exercise name so slots keep
-   realigning, while "alt" is what you actually did. */
-function entryField(key, f) {
-  const e = entriesFor(key);
-  return e && e[f] != null ? e[f] : null;
-}
-function writeEntry(key, f, v, progName) {
-  const wk = wkNow();
-  if (!S.log.weeks[wk]) S.log.weeks[wk] = {};
-  const ex = (S.log.weeks[wk][key] = S.log.weeks[wk][key] || {});
-  if (progName) ex.n = progName;
-  if (v == null) delete ex[f];
-  else ex[f] = v;
-  persist();
-}
-function weekSets(key) {
-  const v = entryField(key, "sets");
-  const n = parseInt(v, 10);
-  return v != null && !isNaN(n) && n > 0 ? n : null;
-}
-function shownName(it) {
-  const a = entryField(it.key, "alt");
-  return a && String(a).trim() ? String(a).trim() : it.name;
-}
-/* what history and bests should file this entry under */
-function logName(e) {
-  return e && e.alt && String(e.alt).trim() ? String(e.alt).trim() : e && e.n ? e.n : null;
-}
-
-/* Extra exercises added on the day live only in that week's log, keyed
-   {pid}:d{n}a{n}. They become pseudo-items so every consumer treats them
-   like the rest of the day. */
-function dayExtras(di) {
-  const w = S.log.weeks[wkNow()] || {};
-  const pid = activeProgram() ? activeProgram().id : "";
-  const re = new RegExp("^" + pid.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ":d" + di + "a(\\d+)$");
-  return Object.keys(w)
-    .map(function (k) {
-      const m = k.match(re);
-      if (!m || !w[k] || !w[k].n) return null;
-      return {
-        kind: "ex", extra: true, key: k, ord: +m[1],
-        name: w[k].n, sets: w[k].sets || 1, reps: w[k].reps || "",
-        confirmed: true, /* typed by hand; never route it to the confirm flow */
-      };
-    })
-    .filter(Boolean)
-    .sort(function (a, b) { return a.ord - b.ord; });
-}
-
-/* A whole day can stand aside for the week. The trade lives on that week's
-   log exactly like an exercise swap does, keyed in the parked namespace so
-   slot repair never touches it; the program is untouched and next week the
-   day is back. Logging the session still files under the program's own day. */
-function daySwapKey(dayId) {
-  const p = activeProgram();
-  return (p ? p.id + ":" : "") + "x:day:" + dayId;
-}
-function daySwap(day) {
-  if (!day) return null;
-  const w = S.log.weeks[wkNow()] || {};
-  return w[daySwapKey(day.id)] || null;
-}
-/* what the day actually presents this week: a traded day hides the program's
-   own exercises so progress and the summary count only what is real */
-function liveDayItems(day) {
-  return daySwap(day) ? [] : day.items;
-}
-
-function currentDayIndex() {
-  const dp = parsedProgram();
-  /* rest slots live past the end of dp.days, so index through dayAt or a
-     rest day resolves to day 0 and its extras land on the wrong day */
-  const day = dayAt(dp, S.dayIdx) || dp.days[0];
-  return day ? dayIndexOf(day) : 0;
-}
-
-/* Anchored programs shorter than seven days fill the gap with rest slots:
-   real days in the UI, empty of prescribed work, but fully trackable through
-   the extras system so training on a rest day still counts. */
-function restSlotCount(dp) {
-  /* a grab-and-go workout has no week around it, so nothing to fill */
-  if (dp.days.length === 1 && !dp.length) return 0;
-  return progAnchorISO() && dp.days.length < 7 ? 7 - dp.days.length : 0;
-}
-function restDayObj(idx) {
-  return { id: "d" + idx, name: "Day " + (idx + 1), title: "Rest day", items: [], rest: true };
-}
-function dayAt(dp, idx) {
-  if (idx < dp.days.length) return dp.days[idx];
-  if (idx < dp.days.length + restSlotCount(dp)) return restDayObj(idx);
-  return dp.days[Math.min(idx, dp.days.length - 1)] || dp.days[0];
-}
-function dayIndexOf(day) {
-  if (day.rest) return +String(day.id || "d0").slice(1);
-  for (let i = 0; i < day.items.length; i++) {
-    const m = String(day.items[i].key || "").match(/^d(\d+)e/);
-    if (m) return +m[1];
-  }
-  const dp = cacheParsed;
-  return dp ? dp.days.indexOf(day) : -1;
-}
-
-/* A typed zero in the reps box is a slip, not a set - nobody logs zero reps.
-   An EMPTY reps box is a different thing and stays legal, because that is how
-   bodyweight and timed work: a ticked set with no numbers is real. Zero WEIGHT
-   is legal too - bodyweight sets are logged at 0 kg, which is why this looks at
-   reps alone. */
-function repsBad(s) {
-  if (!s) return false;
-  const t = String(s.r == null ? "" : s.r).trim();
-  if (t === "") return false;
-  const n = numOf(t);
-  return isNaN(n) || n <= 0;
-}
-
-/* out of this week's plan, but if you ticked it you did it, so count it */
-function anyTicked(e) {
-  const ks = setIdx(e);
-  for (let i = 0; i < ks.length; i++) if (e[ks[i]] && e[ks[i]].d) return true;
-  return false;
-}
-
-function summarize(day, entriesFor, eff) {
-  let setsDone = 0;
-  let volume = 0;
-  let exDone = 0;
-  let exTotal = 0;
-  let unweighted = 0;
-  const lines = [];
-  liveDayItems(day).concat(dayExtras(dayIndexOf(day))).forEach((it) => {
-    if (it.kind !== "ex") return;
-    if (!itemActive(it, eff) && !anyTicked(entriesFor(it.key))) return;
-    exTotal++;
-    const n = setsFor(it);
-    const e = entriesFor(it.key);
-    let done = 0;
-    let best = null;
-    let vol = 0;
-    for (let i = 0; i < n; i++) {
-      const s = e[i];
-      if (!s || !s.d) continue;
-      done++;
-      setsDone++;
-      const w = numOf(s.w);
-      const rp = numOf(s.r);
-      if (!isNaN(w) && !isNaN(rp) && dropsComplete(s)) {
-        vol += w * rp;
-        (s.dr || []).forEach(function (d2) {
-          vol += numOf(d2.w) * numOf(d2.r);
-        });
-        if (!best || w > best.w) best = { w, r: rp };
-      } else if (!isTimed(it)) {
-        unweighted++;
-      }
-    }
-    if (done === n) exDone++;
-    if (done > 0)
-      lines.push({ name: shownName(it), done: done, total: n, best, vol });
-    volume += vol;
-  });
-  return { setsDone, volume: Math.round(volume), exDone, exTotal, lines, unweighted };
-}
-
-const fmtSet = (s) => {
-  const w = s.w ? s.w + U() : "";
-  const r = s.r ? s.r : "";
-  if (w && r) return w + " × " + r;
-  return w || (r ? r + " reps" : "done");
-};
-
-const SEED = `Elite 7-Day Mass Building Program (8 Weeks)
-Program Principles
-Duration: 90 minutes per session
-Warm-up: 10 minutes plus ramp-up sets
-Working sets taken to 0–1 RIR (reps in reserve)
-Last set of isolation exercises: failure plus dropset or rest-pause
-Rest: heavy compounds 2–3 minutes, isolation 60–90 seconds
-Tempo: 3 second lowering phase, explosive concentric, squeeze contractions
-
-Monday – Upper Power (Chest Focus)
-Exercise
-Sets
-Reps
-Incline Barbell Press
-5
-5–8
-Flat Dumbbell Press
-4
-8–10
-Weighted Dips
-3
-8–12
-Incline Machine Press
-3
-10–12
-Cable Fly (High to Low)
-3
-15
-Machine Lateral Raises
-5
-15–20
-Rope Pushdowns
-4
-12–15
-Hanging Leg Raises
-4
-15
-
-Tuesday – Back Thickness & Width
-Exercise
-Sets
-Reps
-Deadlift (Weeks 1,3,5,7)
-4
-5
-Rack Pull (Weeks 2,4,6,8)
-4
-6
-Weighted Pull-ups
-4
-8
-Chest Supported Row
-4
-10
-T-Bar Row
-3
-10
-Wide Grip Pulldown
-3
-12
-Straight Arm Pulldown
-3
-15
-Rear Delt Fly
-4
-20
-
-Wednesday – Tom Platz Leg Day
-Exercise
-Sets
-Reps
-Back Squat
-6
-6–10
-Front Squat
-4
-10
-Leg Press
-4
-15
-Bulgarian Split Squat
-3
-12
-Walking Lunges
-2
-20 steps
-Leg Extensions
-3
-20
-Standing Calf Raises
-6
-15–20
-Seated Calves
-4
-20
-Finish with:
-Sled Push × 6 rounds
-
-Thursday – Shoulder Domination
-Exercise
-Sets
-Reps
-Seated Dumbbell Press
-5
-8
-Smith Machine Press
-3
-10
-Cable Lateral Raise
-6
-15
-Dumbbell Lateral Raise
-4
-15
-Rear Pec Deck
-5
-20
-Upright Cable Row
-3
-12
-Heavy Shrugs
-5
-12
-
-Friday – Arm Annihilation
-Triceps
-Close Grip Bench Press – 4×8
-Skull Crushers – 4×10
-Rope Pushdowns – 4×15
-Overhead Rope Extensions – 3×15
-Biceps
-EZ Bar Curl – 4×8
-Incline Dumbbell Curl – 4×10
-Hammer Curl – 3×12
-Bayesian Cable Curl – 3×15
-Finish
-Forearm circuit × 3 rounds
-Wrist curls
-Reverse curls
-Farmer carries
-
-Saturday – Posterior Chain
-Exercise
-Sets
-Reps
-Romanian Deadlift
-5
-8
-Seated Leg Curl
-4
-12
-Lying Leg Curl
-4
-15
-Hip Thrust
-4
-10
-Hyperextensions
-3
-15
-Seated Calves
-5
-20
-Cable Crunch
-5
-20
-
-Sunday – Aesthetic Pump Day
-Keep rest periods to 45–60 seconds.
-Giant Set 1 (4 rounds)
-Incline Smith Press ×12
-Neutral Grip Pulldown ×12
-Machine Chest Press ×15
-Giant Set 2 (4 rounds)
-Cable Lateral Raise ×20
-Rear Delt Fly ×20
-Face Pull ×20
-Giant Set 3 (3 rounds)
-Cable Curl ×15
-Rope Pushdown ×15
-Incline Curl ×12
-Overhead Extension ×12
-Finish with:
-20–30 minutes incline treadmill walking
-
-Weekly Progression
-Weeks 1–2: Learn technique and establish baseline weights.
-Weeks 3–4: Increase weight by 2.5–5% while staying within the target rep ranges.
-Week 5: Add one extra working set to the first two exercises of each workout.
-Weeks 6–7: Continue increasing load where possible. On the last set of isolation exercises, use a dropset or rest-pause technique.
-Week 8: Deload by reducing all working sets by about 40–50%, while maintaining good form and moderate intensity.
-
-Nutrition Around Training
-Pre-workout, 60–90 minutes before: oats, banana, peanut butter, optional whey protein.
-Post-workout, within 1 hour: chicken or lean mince, basmati rice, vegetables.
-Evening meal: lean mince or steak, potatoes or rice, vegetables.
-Before bed: Greek yogurt, almonds.`;
-
-
-/* ===== storage: localStorage, with an in-memory fallback ===== */
-const KEY = "ironlog.v1";
-let mem = null;
-function loadState() {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {}
-  return mem;
-}
-let saveTimer = null;
-function persist() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    const data = { programs: S.programs, activeId: S.activeId, log: S.log };
-    mem = data;
-    try {
-      localStorage.setItem(KEY, JSON.stringify(data));
-    } catch (e) {}
-  }, 300);
-}
-
-/* ===== state ===== */
-const S = {
-  programs: [],
-  activeId: null,
-  log: { weeks: {}, settings: {}, sessions: {}, body: {}, pbs: {}, cats: {} },
-  tab: "train",
-  dayIdx: 0,
-  weekOff: 0,
-  openEx: null,
-  editing: null,
-  sheet: null,
-  rest: null,
-};
-
-const boot = loadState();
-if (boot && boot.programs && boot.programs.length) {
-  S.programs = boot.programs;
-  S.activeId = boot.activeId || boot.programs[0].id;
-  S.log = {
-    weeks: (boot.log && boot.log.weeks) || {},
-    settings: (boot.log && boot.log.settings) || {},
-    sessions: (boot.log && boot.log.sessions) || {},
-    body: (boot.log && boot.log.body) || {},
-    pbs: (boot.log && boot.log.pbs) || {},
-    cats: (boot.log && boot.log.cats) || {},
-  };
-} else {
-  S.programs = [
-    { id: "p" + Date.now(), raw: SEED, title: parseProgram(SEED).title, start: "2026-07-06" },
-  ];
-  S.activeId = S.programs[0].id;
-}
-
-/* week keys written before the timezone fix landed on Sunday east of UTC */
-/* Two weeks can collide when a device has written both an old Sunday-dated key and
-   its Monday equivalent. Overwriting one with the other destroys logged sets, so
-   merge set by set and never replace something already recorded. */
-function mergeInto(target, incoming, bucket) {
-  Object.keys(incoming).forEach(function (k) {
-    const b = incoming[k];
-    const a = target[k];
-    if (!a) {
-      target[k] = b;
-      return;
-    }
-    if (bucket === "sessions") {
-      /* keep whichever session recorded more work */
-      if ((b.sets || 0) > (a.sets || 0)) target[k] = b;
-      return;
-    }
-    setIdx(b).forEach(function (i) {
-      const bs = b[i];
-      if (!bs) return;
-      const as = a[i];
-      const bHas = bs.d || bs.w || bs.r;
-      const aHas = as && (as.d || as.w || as.r);
-      if (bHas && (!aHas || (!as.d && bs.d))) a[i] = bs;
-    });
-    if (!a.n && b.n) a.n = b.n;
-    if (!a.alt && b.alt) a.alt = b.alt;
-    if (a.sets == null && b.sets != null) a.sets = b.sets;
-  });
-}
-
-function migrateWeekKeys() {
-  let moved = 0;
-  /* anchored numbered-day programs keep buckets on their own weekday, not
-     Mondays: any key that is a whole number of weeks from an anchor is legal */
-  const anchors = [];
-  (S.programs || []).forEach(function (pr) {
-    if (!pr.start || !pr.raw) return;
-    try {
-      if (isNumberedDp(parseProgram(pr.raw))) {
-        const a = new Date(pr.start + "T00:00:00");
-        if (!isNaN(a.getTime())) anchors.push(a.getTime());
-      }
-    } catch (e) {}
-  });
-  const onAnchor = function (d) {
-    return anchors.some(function (a) {
-      return Math.round((d.getTime() - a) / 86400000) % 7 === 0;
-    });
-  };
-  ["weeks", "sessions"].forEach(function (bucket) {
-    const src = S.log[bucket] || {};
-    Object.keys(src).forEach(function (k) {
-      const d = new Date(k + "T00:00:00");
-      if (isNaN(d.getTime()) || d.getDay() === 1 || onAnchor(d)) return;
-      d.setDate(d.getDate() + ((8 - d.getDay()) % 7));
-      const nk = ymd(d);
-      if (src[nk]) mergeInto(src[nk], src[k], bucket);
-      else src[nk] = src[k];
-      delete src[k];
-      moved++;
-    });
-  });
-  if (moved) persist();
-}
-
-/* legacy logs were saved without a program prefix; hand them to the first program */
-function migrateKeys() {
-  if (!S.programs.length) return;
-  const owner = S.programs[0].id;
-  let moved = 0;
-  Object.keys(S.log.weeks || {}).forEach((wk) => {
-    const w = S.log.weeks[wk];
-    Object.keys(w).forEach((k) => {
-      if (k.indexOf(":") >= 0) return;
-      w[owner + ":" + k] = w[k];
-      delete w[k];
-      moved++;
-    });
-  });
-  Object.keys(S.log.sessions || {}).forEach((wk) => {
-    const w = S.log.sessions[wk];
-    Object.keys(w).forEach((k) => {
-      if (k.indexOf(":") >= 0) return;
-      w[owner + ":" + k] = w[k];
-      delete w[k];
-    });
-  });
-  if (moved) persist();
-}
-
-const settings = () =>
-  Object.assign({ restSec: 90, autoRest: true, autoTick: true }, S.log.settings || {});
-
-/* ===== derived ===== */
-const activeProgram = () =>
-  S.programs.find((p) => p.id === S.activeId) || S.programs[0];
-
-let cacheRaw = null;
-let cacheParsed = null;
-function parsedProgram() {
-  const p = activeProgram();
-  if (!p) return null;
-  const stamp = p.id + "|" + p.raw + "|" + JSON.stringify(p.fixes || {});
-  if (stamp !== cacheRaw) {
-    cacheRaw = stamp;
-    const dp = applyFixes(parseProgram(p.raw), p.fixes);
-    /* scope slots to this program so two programs cannot share logged sets */
-    dp.days.forEach((d) =>
-      d.items.forEach((it) => {
-        if (it.kind === "ex" && it.key.indexOf(":") < 0) it.key = p.id + ":" + it.key;
-      })
-    );
-    cacheParsed = dp;
-    try {
-      repairKeys(dp, p.id);
-    } catch (e) {}
-  }
-  return cacheParsed;
-}
-
-const wkNow = () => wkKey(S.weekOff);
-const entriesFor = (k) => (S.log.weeks[wkNow()] && S.log.weeks[wkNow()][k]) || {};
-const effWeek = () => {
-  const p = activeProgram();
-  const dp = parsedProgram();
-  if (!p || !dp) return null;
-  const pw = programWeek(p.start, S.weekOff, dp.length, isNumberedDp(dp));
-  return pw && !pw.before ? pw.eff : null;
-};
-
-function dayProgress(day) {
-  const eff = effWeek();
-  let total = 0,
-    done = 0;
-  liveDayItems(day).concat(dayExtras(dayIndexOf(day))).forEach((it) => {
-    if (it.kind !== "ex") return;
-    const e = entriesFor(it.key);
-    if (!itemActive(it, eff) && !anyTicked(e)) return;
-    const n = setsFor(it);
-    total += n;
-    for (let i = 0; i < n; i++) if (e[i] && e[i].d) done++;
-  });
-  return { total, done, pct: total ? done / total : 0 };
-}
-
-function historyIndex() {
-  const map = {};
-  const cur = wkNow();
-  Object.keys(S.log.weeks || {}).forEach((week) => {
-    if (week >= cur) return;
-    const w = S.log.weeks[week];
-    Object.keys(w).forEach((k) => {
-      const e = w[k];
-      if (!e || !logName(e)) return;
-      const sets = setIdx(e)
-        .map((x) => e[x])
-        .filter((s) => s && s.d && (s.w || s.r) && !repsBad(s));
-      if (!sets.length) return;
-      const key = nn(logName(e));
-      (map[key] = map[key] || []).push({ week, sets });
-    });
-  });
-  Object.keys(map).forEach((k) => map[k].sort((a, b) => (a.week < b.week ? 1 : -1)));
-  return map;
-}
-
-/* Slots are named by position, so editing a program's text can shift them and
-   attach logged sets to the wrong exercise. Every entry stores its exercise name,
-   so realign them whenever the program is (re)parsed. Anything whose exercise no
-   longer exists is parked under a key that cannot collide, keeping it available to
-   history and personal bests without polluting a live slot. */
-function repairKeys(dp, pid) {
-  const byDay = {};
-  const nameOfKey = {};
-  const dupe = {};
-  dp.days.forEach(function (d, di) {
-    byDay[di] = {};
-    const seen = {};
-    d.items.forEach(function (it) {
-      if (it.kind !== "ex") return;
-      const k = nn(it.name);
-      /* two exercises with the same name in one day cannot be told apart by name,
-         so leave their slots alone rather than shuffling logs between them */
-      if (seen[k]) dupe[k] = true;
-      seen[k] = true;
-      byDay[di][k] = it.key;
-      nameOfKey[it.key] = k;
-    });
-  });
-
-  const wanted = function (k, name) {
-    const m = k.match(/:d(\d+)e/);
-    const di = m ? +m[1] : -1;
-    if (byDay[di] && byDay[di][name]) return byDay[di][name];
-    const days = Object.keys(byDay);
-    for (let j = 0; j < days.length; j++) {
-      if (byDay[days[j]][name]) return byDay[days[j]][name];
-    }
-    return null;
-  };
-
-  let moved = 0;
-  Object.keys(S.log.weeks || {}).forEach(function (wk) {
-    const w = S.log.weeks[wk];
-    const mine = [];
-    const out = {};
-    /* everything not ours, and anything already parked, passes straight through */
-    Object.keys(w).forEach(function (k) {
-      if (k.indexOf(pid + ":") !== 0 || k.indexOf(":x:") >= 0) out[k] = w[k];
-      else mine.push(k);
-    });
-    if (!mine.length) return;
-
-    /* two passes, so a pair of entries swapping places cannot block each other */
-    const claims = [];
-    mine.forEach(function (k) {
-      if (/:d\d+a\d+$/.test(k)) {
-        out[k] = w[k]; /* added on the day; not the program's to reshuffle */
-        return;
-      }
-      const e = w[k];
-      const name = e && e.n ? nn(e.n) : null;
-      claims.push({ k: k, e: e, name: name, to: name ? wanted(k, name) : k });
-    });
-    claims.forEach(function (c) {
-      if (c.name && dupe[c.name]) {
-        out[c.k] = c.e; /* ambiguous name, keep its position */
-        return;
-      }
-      /* a swapped entry legitimately answers to a name the program does not
-         have; while its slot is still in the program it stays put, because
-         parking it would silently undo the swap and hide its logged sets */
-      if (c.e && c.e.alt && !c.to && nameOfKey[c.k] && !out[c.k]) {
-        out[c.k] = c.e;
-        return;
-      }
-      if (!c.name) {
-        out[c.k] = c.e; /* no name recorded, leave it where it is */
-        return;
-      }
-      const to = c.to;
-      if (to && !out[to]) {
-        out[to] = c.e;
-        if (to !== c.k) moved++;
-      } else {
-        out[pid + ":x:" + c.name] = c.e; /* gone, or a duplicate claim */
-        moved++;
-      }
-    });
-    S.log.weeks[wk] = out;
-  });
-  if (moved) persist();
-  return moved;
-}
-
-const scopedDay = (dayId) => {
-  const p = activeProgram();
-  return (p ? p.id + ":" : "") + dayId;
-};
-const sessionFor = (dayId) => {
-  const wk = wkNow();
-  if (!S.log.sessions || !S.log.sessions[wk]) return null;
-  return S.log.sessions[wk][scopedDay(dayId)] || null;
-};
-
-/* ===== mutations ===== */
-/* A deload halves sets only while the toggle is on. Marking the day as done
-   is the declaration of what the session was, so at that moment the halved
-   counts are written onto every exercise you touched, as per-day overrides.
-   Turning the toggle off later cannot then reinterpret a finished session
-   as half done. */
-function stampDeloadDay(day) {
-  if (!deloadActive()) return;
-  const wk = wkNow();
-  const w = S.log.weeks[wk] || {};
-  day.items.concat(dayExtras(dayIndexOf(day))).forEach(function (it) {
-    if (it.kind !== "ex" || it.extra) return;
-    const ex = w[it.key];
-    if (!ex || ex.sets != null) return;
-    if (!anyTicked(ex)) return;
-    ex.sets = setsFor(it);
-  });
-}
-
-function patch(key, i, p, name) {
-  const wk = wkNow();
-  const weeks = S.log.weeks;
-  weeks[wk] = weeks[wk] || {};
-  weeks[wk][key] = weeks[wk][key] || {};
-  weeks[wk][key].n = name;
-  weeks[wk][key][i] = Object.assign({}, weeks[wk][key][i], p);
-  persist();
-  if (p.d === true && settings().autoRest) startRest(settings().restSec);
-}
-
-function clearDay(day) {
-  const wk = wkNow();
-  if (S.log.weeks[wk]) day.items.forEach((it) => {
-    if (it.kind === "ex") delete S.log.weeks[wk][it.key];
-  });
-  if (S.log.sessions[wk]) delete S.log.sessions[wk][scopedDay(day.id)];
-  persist();
-}
-
-function setSetting(p) {
-  S.log.settings = Object.assign(settings(), p);
-  persist();
-}
-
-function setStart(id, v) {
-  const p = S.programs.find((x) => x.id === id);
-  if (p) {
-    p.start = v;
-    migrateAnchor();
-  }
-  persist();
-}
-
-/* ===== rest timer ===== */
-let restInt = null;
-let rang = false;
-function startRest(sec) {
-  rang = false;
-  S.rest = { end: Date.now() + sec * 1000, dur: sec };
-  clearInterval(restInt);
-  restInt = setInterval(tickRest, 250);
-  paintTimer();
-}
-function stopRest() {
-  clearInterval(restInt);
-  restInt = null;
-  S.rest = null;
-  const el = document.getElementById("timerbar");
-  if (el) el.remove();
-  paintUndo();
-}
-function restLeft() {
-  return S.rest ? Math.max(0, Math.ceil((S.rest.end - Date.now()) / 1000)) : 0;
-}
-function tickRest() {
-  const left = restLeft();
-  if (left === 0 && !rang) {
-    rang = true;
-    beep();
-    if (navigator.vibrate) try { navigator.vibrate([120, 80, 120]); } catch (e) {}
-    clearInterval(restInt);
-    restInt = null;
-  }
-  paintTimer();
-}
-/* Clearing a set is one tap, so undoing it should be too. The bar lives
-   outside render() the way the rest timer does, so a re-render cannot
-   yank it away mid-tap. Nothing here is persisted: an undo that survived
-   a reload would be worse than no undo at all. */
-/* Set when sw.js has stored a different build than the one running. Declared
-   up here, not beside the listener at the end of the file: the first render
-   reads it, and a let read before its line runs would stop the app booting. */
-let updateReady = null;
-let updateHidden = null;
-
-const UNDO_MS = 12000;
-let undoState = null;
-let undoTimer = null;
-let undoSeq = 0;
-
-function offerUndo(key, i, name, prev) {
-  clearTimeout(undoTimer);
-  const el = document.getElementById("undobar");
-  if (el) el.remove();
-  undoState = { key: key, i: i, name: name, prev: prev, seq: ++undoSeq };
-  undoTimer = setTimeout(dropUndo, UNDO_MS);
-  paintUndo();
-}
-
-function dropUndo() {
-  clearTimeout(undoTimer);
-  undoTimer = null;
-  undoState = null;
-  paintUndo();
-}
-
-function takeUndo() {
-  if (!undoState) return false;
-  const u = undoState;
-  const wk = wkNow();
-  S.log.weeks[wk] = S.log.weeks[wk] || {};
-  S.log.weeks[wk][u.key] = S.log.weeks[wk][u.key] || {};
-  if (u.name) S.log.weeks[wk][u.key].n = u.name;
-  /* put the set back exactly as it was, without re-arming the rest timer */
-  S.log.weeks[wk][u.key][u.i] = u.prev;
-  persist();
-  dropUndo();
-  return true;
-}
-
-function paintUndo() {
-  let el = document.getElementById("undobar");
-  if (!undoState) {
-    if (el) el.remove();
-    return;
-  }
-  if (!el || el.dataset.seq !== String(undoState.seq)) {
-    if (el) el.remove();
-    el = document.createElement("div");
-    el.id = "undobar";
-    el.dataset.seq = String(undoState.seq);
-    el.innerHTML =
-      '<div class="in"><span class="grow">Set ' + (undoState.i + 1) + " cleared</span>" +
-      '<button class="undo" data-act="undo-take">Undo</button>' +
-      '<button class="x" data-act="undo-drop">&times;</button></div>';
-    document.body.appendChild(el);
-  }
-  el.className = "undobar" + (document.getElementById("timerbar") ? " stacked" : "");
-}
-
-function paintTimer() {
-  let el = document.getElementById("timerbar");
-  if (!S.rest) {
-    if (el) el.remove();
-    return;
-  }
-  if (!el) {
-    el = document.createElement("div");
-    el.id = "timerbar";
-    document.body.appendChild(el);
-  }
-  const left = restLeft();
-  const mm = Math.floor(left / 60);
-  const ss = String(left % 60).padStart(2, "0");
-  el.className = "timerbar" + (left === 0 ? " ding" : "");
-  el.innerHTML =
-    '<div class="wrap"><div class="in">' +
-    '<span style="color:' + (left === 0 ? "var(--ink)" : "var(--rest)") + '">&#9202;</span>' +
-    '<span class="t tnum">' + mm + ":" + ss + "</span>" +
-    '<button class="add" data-act="rest-add">+30s</button>' +
-    '<button class="x" data-act="rest-stop">&times;</button>' +
-    "</div></div>";
-  paintUndo();
-}
-
-/* ===== helpers ===== */
-const esc = (s) =>
-  String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
-  );
-const svg = (d, extra) =>
-  '<svg viewBox="0 0 24 24" ' + (extra || "") + ">" + d + "</svg>";
-const ICON = {
-  user: svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" stroke-linecap="round"/>'),
-  gear: svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" stroke-linejoin="round"/>'),
-  medal: svg('<circle cx="12" cy="14" r="5"/><path d="m9 9.5-3-6.5h4l2 4 2-4h4l-3 6.5" stroke-linejoin="round"/>'),
-  cal: svg('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18" stroke-linecap="round"/>'),
-  dumbbell: svg('<path d="M6.5 6.5v11M3 9v5M17.5 6.5v11M21 9v5M6.5 12h11" stroke-linecap="round"/>'),
-  notes: svg('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" stroke-linejoin="round"/><path d="M14 3v5h5M9 13h6M9 17h4" stroke-linecap="round"/>'),
-  layers: svg('<path d="M12 3 3 8l9 5 9-5-9-5Z" stroke-linejoin="round"/><path d="m3 14 9 5 9-5" stroke-linejoin="round"/>'),

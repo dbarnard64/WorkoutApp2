@@ -1,0 +1,601 @@
+      '<textarea data-in="restore-text" style="width:100%;min-height:160px;background:var(--ink);' +
+      'border:1px solid var(--line);border-radius:12px;padding:12px;font-size:13px" placeholder="{ ... }"></textarea>' +
+      '<button class="btn-primary" style="width:100%;margin-top:16px" data-act="restore-go">Restore</button>'
+  );
+}
+
+/* ===== paste screen ===== */
+
+function savePasted(dp) {
+  if (S.editing === "new") {
+    const np = {
+      id: "p" + Date.now(),
+      raw: S.draft.text,
+      title: dp.title,
+      start: S.draft.start,
+    };
+    S.programs.push(np);
+    S.activeId = np.id;
+  } else {
+    const p = S.programs.find((x) => x.id === S.editing);
+    if (p) {
+      p.raw = S.draft.text;
+      p.title = dp.title;
+      p.start = S.draft.start;
+      S.activeId = p.id;
+    }
+  }
+  cacheRaw = null;
+  S.editing = null;
+  S.dayIdx = 0;
+  S.tab = "train";
+  seedToday();
+  persist();
+}
+
+function vPastePreview() {
+  const t = (S.draft.text || "").trim();
+  if (!t) return "";
+  const dp = parseProgram(t);
+  const ex = dp.days.reduce((a, d) => a + d.count, 0);
+  if (!ex)
+    return (
+      '<div class="warn" style="margin-top:16px">Nothing here reads as an exercise yet. Each one needs a ' +
+      "number of sets and reps &mdash; like <b>Deadlift &ndash; 5 sets x 8-10</b> &mdash; or a name, sets " +
+      "and reps on three separate lines.</div>"
+    );
+  return (
+    '<div class="block mt">' +
+    '<div class="eyebrow">Detected</div>' +
+    '<div class="ttl" style="font-size:22px;margin-top:6px">' + esc(dp.title) + "</div>" +
+    '<div class="sub tnum">' + plu(dp.days.length, "day") + " · " + plu(ex, "exercise") + " · " +
+    plu(dp.info.length, "note section") + (dp.length ? " · " + plu(dp.length, "week") : "") + "</div>" +
+    '<div class="chips">' +
+    dp.days.map((d) => '<span class="pchip tnum">' + esc(d.name) + " · " + d.count + "</span>").join("") +
+    "</div>" +
+    '<div class="row mt" style="border-top:1px solid var(--line);padding-top:16px"><div class="sub">' +
+    (dp.days.length === 1 && !dp.length
+      ? "One-day workout &mdash; it lands under Grab-and-go, no start date needed."
+      : "You\u2019ll be asked when week 1 starts as you save.") +
+    "</div></div></div>"
+  );
+}
+
+function vSessSheet() {
+  const wk = S.sheet.wk, k = S.sheet.k;
+  const rec = (S.log.sessions[wk] || {})[k] || {};
+  const m = k.match(/^(.+):(d\d+)$/);
+  const pid = m ? m[1] : "", di = m ? m[2] : "";
+  const p = S.programs.find(function (x) { return x.id === pid; });
+  const dp = p ? parseProgram(p.raw) : null;
+  const dday = dp ? dp.days[+di.slice(1)] : null;
+  /* every logged exercise of that day, planned or added on the day */
+  const rx = new RegExp("^" + pid.replace(/[.*+?^$()|[\]\\{}]/g, "\\$&") + ":" + di + "(e|a)(\\d+)$");
+  const wkData = S.log.weeks[wk] || {};
+  const exKeys = Object.keys(wkData).filter(function (x) { return rx.test(x); })
+    .sort(function (x, y) {
+      const a2 = x.match(rx), b2 = y.match(rx);
+      return a2[1] === b2[1] ? +a2[2] - +b2[2] : a2[1] === "e" ? -1 : 1;
+    });
+  const nameFor = function (key) {
+    const ent = wkData[key] || {};
+    /* alt is what was actually done that day; n is the program slot it replaced */
+    let base = ent.n;
+    if (!base && dday) {
+      const it = dday.items.find(function (x) { return x.kind === "ex" && x.key && x.key.indexOf(key.slice(key.indexOf(":") + 1)) >= 0; });
+      if (it) base = it.name;
+    }
+    if (ent.alt && (!base || nn(ent.alt) !== nn(base)))
+      return { name: ent.alt, sub: base ? "instead of " + base : "" };
+    return { name: base || "Exercise", sub: "" };
+  };
+  const fmtSet = function (st) {
+    const w = (st.w || "").trim(), r = (st.r || "").trim();
+    if (!w && !r) return "&mdash;";
+    if (!w) return esc(r) + " reps";
+    return esc(w) + " " + U() + " &times; " + (r ? esc(r) : "&mdash;");
+  };
+  const body = exKeys.length
+    ? exKeys.map(function (key) {
+        const ent = wkData[key];
+        const sets = setIdx(ent).sort(function (a2, b2) { return +a2 - +b2; });
+        const cell = function (v, unit) {
+          v = String(v == null ? "" : v).trim();
+          return v ? "<b>" + esc(v) + "</b><em>" + unit + "</em>" : '<b class="nil">&mdash;</b>';
+        };
+        let doneN = 0;
+        const rowsH = sets.map(function (si, i) {
+          const st = ent[si] || {};
+          if (st.d) doneN++;
+          let h =
+            '<div class="ssrow' + (st.d ? " on" : " dim") + '">' +
+            '<span class="ssn tnum" aria-label="' + (st.d ? "Set " + (i + 1) + " logged" : "Set " + (i + 1) + " not logged") + '">' +
+            (st.d ? "&#10003;" : i + 1) + "</span>" +
+            '<span class="ssv tnum">' + cell(st.w, U()) + "</span>" +
+            '<span class="ssv tnum">' + cell(st.r, "reps") + "</span></div>";
+          (st.dr || []).forEach(function (dr, j) {
+            h += '<div class="ssrow drop' + (st.d ? "" : " dim") + '"><span class="ssn">&#8627;</span>' +
+              '<span class="ssv tnum">' + cell(dr.w, U()) + "</span>" +
+              '<span class="ssv tnum">' + cell(dr.r, "reps") + "</span></div>";
+          });
+          return h;
+        }).join("");
+        const nm = nameFor(key);
+        return (
+          '<div class="ssex"><div class="sstop"><div class="grow"><div class="ssname">' + esc(nm.name) + "</div>" +
+          (nm.sub ? '<div class="sssub">' + esc(nm.sub) + "</div>" : "") + "</div>" +
+          '<span class="sscount tnum">' + (doneN === sets.length ? plu(doneN, "set") : doneN + "/" + sets.length) + "</span></div>" +
+          '<div class="sshead"><b>Set</b><span>' + U() + "</span><span>Reps</span></div>" + rowsH + "</div>"
+        );
+      }).join("")
+    : '<p style="color:var(--faint);font-size:13px;margin:0">No set-by-set data survives for this session ' +
+      "&mdash; only the totals were kept.</p>";
+  const dt = new Date((rec.d || ymd(new Date(rec.at))) + "T00:00:00");
+  return sheetShell(
+    dt.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" }),
+    (rec.gg ? rec.pn : rec.dn || rec.pn) || "Session",
+    '<div class="stats ssstats">' +
+    '<div class="stat"><b class="tnum">' + (rec.sets || 0) + '</b><div class="eyebrow" style="margin-top:6px">' + (rec.sets === 1 ? "Set" : "Sets") + "</div></div>" +
+    '<div class="stat"><b class="tnum">' + exKeys.length + '</b><div class="eyebrow" style="margin-top:6px">' + (exKeys.length === 1 ? "Lift" : "Lifts") + "</div></div>" +
+    '<div class="stat"><b class="tnum">' + (rec.volume ? Math.round(rec.volume).toLocaleString() : "&mdash;") + '</b><div class="eyebrow" style="margin-top:6px">' + U() + " lifted</div></div>" +
+    "</div>" + body
+  );
+}
+
+function vStartAskSheet() {
+  return sheetShell(
+    "One more thing",
+    "When does week 1 start?",
+    '<p style="color:var(--mute);font-size:14px;line-height:1.6;margin:0">' +
+    esc(
+      isNumberedDp(parseProgram(S.draft.text))
+        ? humanStart(S.draft.start, true) + " \u2014 numbered days run from the day you pick."
+        : humanMonday(S.draft.start) + " \u2014 pick any day in that week."
+    ) + "</p>" +
+    '<input type="date" class="datefld tnum" style="margin-top:14px;width:100%" value="' +
+    esc(S.draft.start) + '" data-in="paste-start">' +
+    '<button class="btn-primary" style="width:100%;margin-top:16px" data-act="startask-go">Start this program</button>' +
+    '<button class="btn-ghost" style="width:100%;margin-top:10px" data-act="startask-cancel">Back to the text</button>'
+  );
+}
+
+function vPaste() {
+  const t = (S.draft.text || "").trim();
+  const dp = t ? parseProgram(t) : null;
+  const ok = !!(dp && dp.days.length && dp.days.reduce((a, d) => a + d.count, 0) > 0);
+  return (
+    '<div class="paste"><div class="wrap">' +
+    '<div class="top"><div><div class="eyebrow on">Paste a program</div>' +
+    "<h1>Drop the text in</h1>" +
+    "<p>Copy a program from anywhere. Keep day names like Monday or Day 1 on their own line &mdash; " +
+    "everything under them becomes exercises.</p></div>" +
+    (S.programs.length
+      ? '<button class="iconbtn" data-act="paste-cancel" style="font-size:20px">&times;</button>'
+      : "") +
+    "</div>" +
+    '<div class="mid"><textarea data-in="paste-text" placeholder="Monday &ndash; Chest&#10;Bench Press&#10;4&#10;8&ndash;10&#10;Cable Fly &ndash; 3&times;15">' +
+    esc(S.draft.text) + "</textarea>" +
+    '<div id="preview">' + vPastePreview() + "</div></div>" +
+    '<div class="foot"><button class="btn-ghost" data-act="paste-example">Use example</button>' +
+    '<button class="btn-primary" data-act="paste-save"' + (ok ? "" : " disabled") + ">Save program</button>" +
+    "</div></div></div>"
+  );
+}
+
+/* ===== render ===== */
+
+function focusSnapshot() {
+  const el = document.activeElement;
+  if (!el || !el.dataset || !el.dataset.in) return null;
+  return {
+    in: el.dataset.in,
+    key: el.dataset.key || "",
+    i: el.dataset.i || "",
+    d: el.dataset.d || "",
+    start: el.selectionStart,
+    end: el.selectionEnd,
+  };
+}
+
+function focusRestore(f) {
+  if (!f) return;
+  let sel = '[data-in="' + f.in + '"]';
+  if (f.key) sel += '[data-key="' + f.key + '"]';
+  if (f.i) sel += '[data-i="' + f.i + '"]';
+  if (f.d) sel += '[data-d="' + f.d + '"]';
+  const el = document.querySelector(sel);
+  if (!el) return;
+  try {
+    el.focus({ preventScroll: true });
+    if (f.start != null && el.setSelectionRange) el.setSelectionRange(f.start, f.end);
+  } catch (e) {}
+}
+
+function render() {
+  const f = focusSnapshot();
+  renderInner();
+  focusRestore(f);
+  paintUndo();
+}
+
+function renderInner() {
+  const y = window.scrollY;
+  const app = document.getElementById("app");
+
+  if (S.editing === "build") {
+    app.innerHTML = vBuild();
+    dockSync(false);
+    return;
+  }
+
+  if (S.editing) {
+    app.innerHTML = vPaste() + (S.sheet ? vSheet() : "");
+    paintTimer();
+    dockSync(false);
+    return;
+  }
+
+  const dp = parsedProgram();
+  if (!dp || !dp.days.length) {
+    app.innerHTML =
+      '<div class="center"><div class="eyebrow on">No days found</div>' +
+      '<p style="color:var(--mute);font-size:14px;line-height:1.6">Put each day on its own line &mdash; ' +
+      "Monday, Tuesday, or Day 1 &mdash; then the exercises underneath it.</p>" +
+      '<button class="btn-primary" style="max-width:220px" data-act="edit-active">Edit the text</button></div>';
+    return;
+  }
+
+  let body = "";
+  if (S.tab === "bests" || S.tab === "notes" || S.tab === "progress" || S.tab === "settings") S.tab = "profile";
+  if (S.tab === "train") body = vTrain(dp);
+  else if (S.tab === "profile") body = vProfile();
+  else body = vLibrary();
+
+  const PAGE_NAME = { style: "Style", settings: "Settings", pbs: "Personal bests", measures: "Measures", calendar: "Calendar" };
+  let head;
+  if (S.tab === "train") head = vHeader();
+  else if (S.tab === "profile" && S.page) head = vSubHead(PAGE_NAME[S.page] || "Profile");
+  else head = vTabHead(S.tab === "profile" ? "Profile" : "Programs");
+  app.innerHTML = head + body + (S.sheet ? vSheet() : "");
+  dockSync(true);
+  const os = document.getElementById("offline-state");
+  if (os) os.textContent = offlineState;
+  paintTimer();
+  window.scrollTo(0, y);
+}
+
+function vSheet() {
+  if (S.sheet.type === "startask") return vStartAskSheet();
+  if (S.sheet.type === "sess") return vSessSheet();
+  if (S.sheet.type === "summary") return vSummarySheet();
+  if (S.sheet.type === "programs") return vProgramSheet();
+  if (S.sheet.type === "review") return vReviewSheet();
+  if (S.sheet.type === "restore") return vRestoreSheet();
+  if (S.sheet.type === "pb") return vPBSheet();
+  if (S.sheet.type === "notes") return vNotesSheet();
+  if (S.sheet.type === "swap") return vSwapSheet();
+  if (S.sheet.type === "addex") return vAddExSheet();
+  if (S.sheet.type === "dayswap") return vDaySwapSheet();
+  return "";
+}
+
+/* ===== themes ===== */
+const THEMES = {
+  ember: { name: "Ember", ink: "#0A0A0A", panel: "#161616", panel2: "#202020", line: "#2C2C2C",
+    chalk: "#F5F5F5", mute: "#B8B8B8", faint: "#8F8F8F", brass: "#F0B43C", brassDim: "#7D5F23",
+    onAccent: "#0B0B0F", rest: "#5E8C6A", done: "#F0B43C", pop: "#FF6B4A" },
+  brass: { name: "Iron & Brass", ink: "#0A0A0A", panel: "#161616", panel2: "#202020", line: "#2C2C2C",
+    chalk: "#F5F5F5", mute: "#B8B8B8", faint: "#8F8F8F", brass: "#D3A03C", brassDim: "#6E5523",
+    onAccent: "#0B0B0F", rest: "#5E8C6A", done: "#D3A03C", pop: "#F06A52" },
+  midnight: { name: "Midnight Tangerine", ink: "#0A0A0A", panel: "#161616", panel2: "#202020", line: "#2C2C2C",
+    chalk: "#F5F5F5", mute: "#B8B8B8", faint: "#8F8F8F", brass: "#5B8CFF", brassDim: "#324B84",
+    onAccent: "#0B0B0F", rest: "#5E8C6A", done: "#5B8CFF", pop: "#FF8A1F" },
+  abyss: { name: "Abyss", ink: "#0A0A0A", panel: "#161616", panel2: "#202020", line: "#2C2C2C",
+    chalk: "#F5F5F5", mute: "#B8B8B8", faint: "#8F8F8F", brass: "#4FE3C8", brassDim: "#2C7669",
+    onAccent: "#0B0B0F", rest: "#5E8C6A", done: "#4FE3C8", pop: "#FF9EC7" },
+  galactic: { name: "Galactic", ink: "#0A0A0A", panel: "#161616", panel2: "#202020", line: "#2C2C2C",
+    chalk: "#F5F5F5", mute: "#B8B8B8", faint: "#8F8F8F", brass: "#9A88FF", brassDim: "#524984",
+    onAccent: "#0B0B0F", rest: "#5E8C6A", done: "#9A88FF", pop: "#FF6FC8" },
+  crimson: { name: "Oxblood", ink: "#0A0A0A", panel: "#161616", panel2: "#202020", line: "#2C2C2C",
+    chalk: "#F5F5F5", mute: "#B8B8B8", faint: "#8F8F8F", brass: "#FF5A64", brassDim: "#843237",
+    onAccent: "#0B0B0F", rest: "#5E8C6A", done: "#FF5A64", pop: "#F5C451" },
+  forest: { name: "Forest", ink: "#0A0A0A", panel: "#161616", panel2: "#202020", line: "#2C2C2C",
+    chalk: "#F5F5F5", mute: "#B8B8B8", faint: "#8F8F8F", brass: "#6FD49A", brassDim: "#3C6F52",
+    onAccent: "#0B0B0F", rest: "#5E8C6A", done: "#6FD49A", pop: "#F0B43C" },
+  mono: { name: "Graphite", ink: "#0A0A0A", panel: "#161616", panel2: "#202020", line: "#2C2C2C",
+    chalk: "#F5F5F5", mute: "#B8B8B8", faint: "#8F8F8F", brass: "#F2F2F2", brassDim: "#7E7E7E",
+    onAccent: "#0B0B0F", rest: "#5E8C6A", done: "#F2F2F2", pop: "#FF6A1A" },
+  marshmallow: { name: "Marshmallow", ink: "#FFFFFF", panel: "#F4F4F6", panel2: "#E9E9EE", line: "#D9D9E0",
+    chalk: "#141418", mute: "#4A4A55", faint: "#62626D", brass: "#5B3DF5", brassDim: "#AD9EFA",
+    onAccent: "#FFFFFF", rest: "#3F7A55", done: "#5B3DF5", pop: "#B01A63" },
+  daylight: { name: "Daylight", ink: "#FFFFFF", panel: "#F4F4F6", panel2: "#E9E9EE", line: "#D9D9E0",
+    chalk: "#141418", mute: "#4A4A55", faint: "#62626D", brass: "#96600F", brassDim: "#CAB087",
+    onAccent: "#FFFFFF", rest: "#3F7A55", done: "#96600F", pop: "#0A6463" },
+};
+
+/* a green or teal accent would be hard to tell apart from the sage "done" colour */
+function greenish(hex) {
+  const n = parseInt(String(hex).slice(1), 16);
+  const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, bl = (n & 255) / 255;
+  const mx = Math.max(r, g, bl), mn = Math.min(r, g, bl);
+  if (mx - mn < 0.12) return false;
+  let h;
+  if (mx === r) h = ((g - bl) / (mx - mn)) % 6;
+  else if (mx === g) h = (bl - r) / (mx - mn) + 2;
+  else h = (r - g) / (mx - mn) + 4;
+  h = (h * 60 + 360) % 360;
+  return h >= 70 && h <= 175;
+}
+function shade(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) =>
+    Math.max(0, Math.min(255, Math.round(v * amt)))
+  );
+  return "#" + c.map((v) => v.toString(16).padStart(2, "0")).join("");
+}
+/* WCAG contrast between two hex colours */
+/* "1 set", "2 sets" — every count the app prints goes through this */
+function plu(n, one, many) {
+  return n + " " + (+n === 1 ? one : many || one + "s");
+}
+function lumOf(hex) {
+  const n = parseInt(String(hex).slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+    .map(function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); })
+    .reduce(function (s, v, i) { return s + v * [0.2126, 0.7152, 0.0722][i]; }, 0);
+}
+function contrastOf(a, b) {
+  const x = lumOf(a), y = lumOf(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
+/* nudge a picked colour lighter (dark themes) or darker (light themes) until text in it is readable */
+function fitContrast(hex, bg) {
+  if (!/^#[0-9a-f]{6}$/i.test(String(hex))) return hex;
+  const toward = lumOf(bg) < 0.2 ? 255 : 0;
+  const n = parseInt(hex.slice(1), 16);
+  let c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  let out = hex;
+  for (let s = 0; s < 20 && contrastOf(out, bg) < 4.5; s++) {
+    c = c.map(function (v) { return Math.round(v + (toward - v) * 0.08); });
+    out = "#" + c.map(function (v) { return v.toString(16).padStart(2, "0"); }).join("");
+  }
+  return out;
+}
+function readable(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const l = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+  return l > 0.6 ? "#141414" : "#FFFFFF";
+}
+
+function applyTheme() {
+  const st = settings();
+  const t = THEMES[st.theme] || THEMES.ember;
+  const r = document.documentElement.style;
+  Object.keys(t).forEach((k) => {
+    if (k !== "name") r.setProperty("--" + k, t[k]);
+  });
+  /* "done" is its own colour only in themes that define one; elsewhere it
+     follows the accent, exactly as before */
+  r.setProperty("--done", t.done || t.brass);
+  if (st.accent) {
+    const a = fitContrast(st.accent, t.panel);
+    r.setProperty("--done", a);
+    r.setProperty("--brass", a);
+    r.setProperty("--brassDim", shade(a, 0.62));
+    r.setProperty("--onAccent", readable(a));
+  }
+  if (st.pop) r.setProperty("--pop", fitContrast(st.pop, t.panel));
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", t.ink);
+}
+
+/* ===== reps wording ===== */
+function repsLabel(reps) {
+  if (!reps) return "";
+  if (/^[\d\s\u2013\u2014\-\/]+$/.test(reps)) return reps + " reps";
+  return reps;
+}
+/* One day, no week structure: a grab-and-go workout, not a program. */
+function isSingle(p) {
+  if (!p) return false;
+  const dp = applyFixes(parseProgram(p.raw), p.fixes);
+  return dp.days.length === 1 && !dp.length;
+}
+function activeIsSingle() {
+  return isSingle(activeProgram());
+}
+
+function prescription(it) {
+  if (isTimed(it)) {
+    const m = ((it.name || "") + " " + (it.reps || "")).match(
+      /\d+\s*(?:[\u2013\u2014-]\s*\d+)?\s*(?:min|mins|minutes)\b/i
+    );
+    return m ? m[0].replace(/\bmins?\b/i, "minutes") : "timed";
+  }
+  const n = setsFor(it);
+  const s = n + (n === 1 ? " set" : " sets");
+  const r = repsLabel(it.reps);
+  const joiner = /^(to\s|failure|amrap|max)/i.test(r) ? " " : " \u00d7 ";
+  let base = r ? s + joiner + r : s;
+  if (it.drop) base += " \u00b7 " + (it.drop === 2 ? "double " : it.drop === 3 ? "triple " : "") + "drop last set";
+  return it.sets && n !== it.sets ? base + " \u00b7 was " + it.sets : base;
+}
+
+/* ===== unclear exercises + user fixes ===== */
+/* "20-30 minutes incline treadmill walking" is something you do, not something
+   you load. A minutes figure in the name or reps makes an item timed: tick it
+   done, nothing to weigh. */
+function isTimed(it) {
+  const t = (it.name || "") + " " + (it.reps || "");
+  return /\d+\s*(?:[\u2013\u2014-]\s*\d+)?\s*(?:min|mins|minutes)\b/i.test(t);
+}
+
+function isUnclear(it) {
+  return it.kind === "ex" && !isTimed(it) && (!it.sets || !it.reps);
+}
+function applyFixes(dp, fixes) {
+  if (!fixes) return dp;
+  dp.days.forEach((d) =>
+    d.items.forEach((it) => {
+      if (it.kind !== "ex") return;
+      const f = fixes[nn(it.name)];
+      if (!f) return;
+      if (f.skip) {
+        it.confirmed = true;
+        return;
+      }
+      if (f.sets) it.sets = +f.sets;
+      if (f.reps) it.reps = f.reps;
+      it.confirmed = true;
+    })
+  );
+  return dp;
+}
+function unclearList(dp) {
+  const out = [];
+  dp.days.forEach((d) =>
+    d.items.forEach((it) => {
+      if (isUnclear(it) && !it.confirmed) out.push({ name: it.name, day: d.title || d.name });
+    })
+  );
+  const seen = {};
+  return out.filter((x) => {
+    const k = nn(x.name);
+    if (seen[k]) return false;
+    seen[k] = 1;
+    return true;
+  });
+}
+
+/* ===== backup ===== */
+function backupJSON() {
+  return JSON.stringify(
+    { app: "ironlog", version: 1, exported: new Date().toISOString(),
+      programs: S.programs, activeId: S.activeId, log: S.log },
+    null, 2
+  );
+}
+function downloadBackup() {
+  const name = "iron-log-backup-" + new Date().toISOString().slice(0, 10) + ".json";
+  try {
+    const blob = new Blob([backupJSON()], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 1000);
+  } catch (e) {
+    alert("Could not download. Use Copy backup instead and paste it somewhere safe.");
+  }
+}
+function restoreBackup(text) {
+  let d;
+  try {
+    d = JSON.parse(text);
+  } catch (e) {
+    /* a clipboard that dropped the tail is the common failure and looks
+       identical to garbage unless we check the ends and say where it broke */
+    const t = String(text || "").trim();
+    const at = (String(e && e.message).match(/position (\d+)/) || [])[1];
+    const where = at ? " It stops being readable at character " + at + " of " + t.length + "." : "";
+    alert(
+      !t
+        ? "Nothing to restore. Paste the backup text, or pick the file you downloaded."
+        : t.charAt(0) !== "{"
+        ? "That does not look like a backup. It should start with {"
+        : t.charAt(t.length - 1) !== "}"
+        ? "That backup is cut short \u2014 it should end with }." + where +
+          " Copying a large backup can drop the end of it, so pick the downloaded file instead."
+        : "That backup could not be read." + where
+    );
+    return false;
+  }
+  if (!d || !d.programs || !d.programs.length) {
+    alert("No programs found in that backup.");
+    return false;
+  }
+  if (!confirm("Replace everything currently in the app with this backup?")) return false;
+  S.programs = d.programs;
+  S.activeId = d.activeId || d.programs[0].id;
+  S.log = { weeks: (d.log && d.log.weeks) || {}, settings: (d.log && d.log.settings) || {},
+    sessions: (d.log && d.log.sessions) || {}, body: (d.log && d.log.body) || {},
+    pbs: (d.log && d.log.pbs) || {}, cats: (d.log && d.log.cats) || {} };
+  cacheRaw = null;
+  S.sheet = null;
+  S.tab = "train";
+  /* a backup may predate the program-scoped slots or the timezone fix */
+  migrateKeys();
+  migrateWeekKeys();
+  migrateAnchor();
+  seedToday();
+  persist();
+  applyTheme();
+  return true;
+}
+
+/* ===== personal bests + 1RM ===== */
+function bestIndex(beforeWeek) {
+  const map = {};
+  Object.keys(S.log.weeks || {}).forEach((week) => {
+    if (beforeWeek && week >= beforeWeek) return;
+    const w = S.log.weeks[week];
+    Object.keys(w).forEach((k) => {
+      const e = w[k];
+      if (!e || !logName(e)) return;
+      setIdx(e).forEach((i) => {
+        const s = e[i];
+        if (!s || !s.d || repsBad(s)) return;
+        const ww = numOf(s.w);
+        if (isNaN(ww)) return;
+        const rr = numOf(s.r);
+        const key = nn(logName(e));
+        const cur = map[key];
+        if (!cur || ww > cur.w || (ww === cur.w && (rr || 0) > (cur.r || 0)))
+          map[key] = { w: ww, r: isNaN(rr) ? null : rr, week: week };
+      });
+    });
+  });
+  return map;
+}
+
+/* heaviest weight ever, and the best reps achieved at each weight */
+function recordIndex(beforeWeek) {
+  const map = {};
+  Object.keys(S.log.weeks || {}).forEach((week) => {
+    if (beforeWeek && week >= beforeWeek) return;
+    const w = S.log.weeks[week];
+    Object.keys(w).forEach((k) => {
+      const e = w[k];
+      if (!e || !logName(e)) return;
+      const key = nn(logName(e));
+      const m = map[key] || (map[key] = { maxW: -Infinity, reps: {} });
+      setIdx(e).forEach((i) => {
+        const s2 = e[i];
+        if (!s2 || !s2.d || repsBad(s2)) return;
+        const ww = numOf(s2.w);
+        if (isNaN(ww)) return;
+        if (ww > m.maxW) m.maxW = ww;
+        const rr = numOf(s2.r);
+        if (!isNaN(rr) && (m.reps[ww] == null || rr > m.reps[ww])) m.reps[ww] = rr;
+      });
+    });
+  });
+  const man = manualPBs();
+  Object.keys(man).forEach(function (k) {
+    const m = man[k];
+    if (!m || m.hidden) return;
+    const w = numOf(m.w);
+    if (isNaN(w)) return;
+    const r = numOf(m.r);
+    const e = map[k] || (map[k] = { maxW: -Infinity, reps: {} });
+    if (w > e.maxW) e.maxW = w;
+    if (!isNaN(r) && (e.reps[w] == null || r > e.reps[w])) e.reps[w] = r;
+  });
+  return map;
+}
+

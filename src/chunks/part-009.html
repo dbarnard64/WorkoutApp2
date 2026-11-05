@@ -1,434 +1,573 @@
-  if (k === "paste-text") {
-    S.draft.text = el.value;
-    clearTimeout(previewTimer);
-    previewTimer = setTimeout(() => {
-      const pv = document.getElementById("preview");
-      if (pv) pv.innerHTML = vPastePreview();
-      const btn = document.querySelector('[data-act="paste-save"]');
-      if (btn) {
-        const dp = S.draft.text.trim() ? parseProgram(S.draft.text) : null;
-        btn.disabled = !(dp && dp.days.length && dp.days.reduce((a, d) => a + d.count, 0));
-      }
-    }, 350);
-  }
-});
-
-document.addEventListener("change", (ev) => {
-  const el = ev.target;
-  if (el.dataset.in === "start") {
-    setStart(el.dataset.id, el.value);
-    render();
-  }
-  if (el.dataset.in === "paste-start") {
-    S.draft.start = el.value;
-    if (S.sheet && S.sheet.type === "startask") render();
-  }
-  if (el.dataset.in === "b-dayname") {
-    S.build.days[+el.dataset.i].name = el.value;
-    render();
-  }
-  if (el.dataset.in === "b-start") S.build.start = el.value;
-  if (el.dataset.in === "bodyw") render();
-  if (el.dataset.in === "accent") applyAccent(el.value);
-  if (el.dataset.in === "restore-file") {
-    const f = el.files && el.files[0];
-    if (!f) return;
-    const rd = new FileReader();
-    rd.onload = () => {
-      S.restoreText = String(rd.result || "");
-      if (restoreBackup(S.restoreText)) render();
-    };
-    rd.onerror = () => alert("That file could not be read.");
-    rd.readAsText(f);
-  }
-});
-
-/* iOS fires change repeatedly while the colour picker is dragged, and re-rendering
-   would replace the input the picker is anchored to, closing it. So apply the colour
-   through CSS variables and touch up the two bits of text in place. */
-function applyAccent(v) {
-  setSetting({ accent: v });
-  applyTheme();
-  const lab = document.getElementById("accent-label");
-  if (lab) lab.textContent = v;
-  const rst = document.getElementById("accent-reset");
-  if (rst) rst.style.visibility = "visible";
-}
-
-/* ===== init ===== */
-function saveFixes() {
-  const p = activeProgram();
-  if (!p || !S.pendingFix) return;
-  p.fixes = Object.assign({}, p.fixes || {});
-  Object.keys(S.pendingFix).forEach((k) => {
-    const f = S.pendingFix[k];
-    if (f.skip) p.fixes[k] = { skip: true };
-    else if (f.sets || f.reps) p.fixes[k] = { sets: f.sets || null, reps: f.reps || null };
-  });
-  S.pendingFix = {};
-  cacheRaw = null;
-  persist();
-}
-
-/* A program pasted on the weekend is for the week about to start, not the
-   one that is ending. */
-function humanStart(iso, anchored) {
-  if (!iso) return "No date set";
-  if (!anchored) return humanMonday(iso);
-  const d = new Date(iso + "T00:00:00");
-  return "Day 1 = " + d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
-}
-function humanMonday(iso) {
-  if (!iso) return "No date set";
-  const d = new Date(iso + "T00:00:00");
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); /* floor to that week's Monday */
-  return "Week 1 = w/c Mon " + d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
-}
-
-function defaultStart() {
-  const d = new Date();
-  const day = d.getDay(); /* 0 Sun, 6 Sat */
-  if (day === 0 || day === 6) {
-    d.setDate(d.getDate() + ((8 - day) % 7));
-    return ymd(d);
-  }
-  return mondayISO();
-}
-
-function mondayISO() {
-  return ymd(mondayOf(0));
-}
-/* Manual bests, category overrides and parse fixes were filed under the old
-   flat name key. Rebuild them under the canonical one, by name, so nothing
-   has to be re-entered. */
-function migrateNameKeys() {
-  if ((settings().nameKeys || 0) >= 2) return 0;
-  const names = {};
-  const learn = function (nm) { if (nm) names[nnFlat(nm)] = nm; };
-  S.programs.forEach(function (p) {
-    let dp = null;
-    try { dp = parseProgram(p.raw); } catch (e) { return; }
-    dp.days.forEach(function (d) {
-      d.items.forEach(function (it) { if (it.kind === "ex") learn(it.name); });
-    });
-  });
-  Object.keys(S.log.weeks || {}).forEach(function (wk) {
-    const w = S.log.weeks[wk];
-    Object.keys(w).forEach(function (k) { learn(logName(w[k])); });
-  });
-  Object.keys(S.log.pbs || {}).forEach(function (k) {
-    if (S.log.pbs[k]) learn(S.log.pbs[k].name);
-  });
-
-  const man = S.log.pbs || {};
-  const pout = {};
-  Object.keys(man).forEach(function (k) {
-    const m = man[k];
-    if (!m) return;
-    const nk = m.name ? nn(m.name) : names[k] ? nn(names[k]) : k;
-    const cur = pout[nk];
-    /* two spellings collapsing onto one row: the heavier lift wins */
-    if (!cur || cur.hidden || (!m.hidden && numOf(m.w) > numOf(cur.w))) pout[nk] = m;
-  });
-  S.log.pbs = pout;
-
-  const rekey = function (obj) {
-    const out = {};
-    Object.keys(obj || {}).forEach(function (k) {
-      out[names[k] ? nn(names[k]) : k] = obj[k];
-    });
-    return out;
-  };
-  S.log.cats = rekey(S.log.cats);
-  S.programs.forEach(function (p) { if (p.fixes) p.fixes = rekey(p.fixes); });
-
-  setSetting({ nameKeys: 3 }); /* it keyed straight onto the current nn */
-  cacheRaw = null;
-  persist();
-  return 1;
-}
-
-/* The key learned to join split words and read abbreviations (build 3), so
-   rows filed under the build-2 key move to the new one. Logged sets are
-   never touched: history and bests are rebuilt from their names every time,
-   which is also what makes old "Pull Down" and "Pulldown" history merge. */
-function migrateNameKeys3() {
-  if (settings().nameKeys !== 2) return 0;
-  const names = {};
-  const learn = function (nm) { if (nm) names[nnV2(nm)] = nm; };
-  S.programs.forEach(function (p) {
-    let dp = null;
-    try { dp = parseProgram(p.raw); } catch (e) { return; }
-    dp.days.forEach(function (d) {
-      d.items.forEach(function (it) { if (it.kind === "ex") learn(it.name); });
-    });
-  });
-  Object.keys(S.log.weeks || {}).forEach(function (wk) {
-    const w = S.log.weeks[wk];
-    Object.keys(w).forEach(function (k) { if (w[k]) { learn(w[k].n); learn(logName(w[k])); } });
-  });
-  Object.keys(S.log.pbs || {}).forEach(function (k) {
-    if (S.log.pbs[k]) learn(S.log.pbs[k].name);
-  });
-  const to = function (k) { return names[k] ? nn(names[k]) : k; };
-
-  const man = S.log.pbs || {};
-  const pout = {};
-  Object.keys(man).forEach(function (k) {
-    const m = man[k];
-    if (!m) return;
-    const nk = m.name ? nn(m.name) : to(k);
-    const cur = pout[nk];
-    /* two spellings collapsing onto one row: the heavier lift wins */
-    if (!cur || cur.hidden || (!m.hidden && numOf(m.w) > numOf(cur.w))) pout[nk] = m;
-  });
-  S.log.pbs = pout;
-
-  const rekey = function (obj) {
-    const out = {};
-    Object.keys(obj || {}).forEach(function (k) {
-      const nk = to(k);
-      if (!(nk in out)) out[nk] = obj[k];
-    });
-    return out;
-  };
-  S.log.cats = rekey(S.log.cats);
-  S.programs.forEach(function (p) { if (p.fixes) p.fixes = rekey(p.fixes); });
-
-  /* parked entries carry the key in their slot name; day trades do not */
-  Object.keys(S.log.weeks || {}).forEach(function (wk) {
-    const w = S.log.weeks[wk];
-    Object.keys(w).forEach(function (k) {
-      const at = k.indexOf(":x:");
-      if (at < 0) return;
-      const rest = k.slice(at + 3);
-      if (rest.indexOf("day:") === 0 || !w[k] || !w[k].n) return;
-      const nk = k.slice(0, at) + ":x:" + nn(w[k].n);
-      if (nk !== k && !w[nk]) {
-        w[nk] = w[k];
-        delete w[k];
-      }
-    });
-  });
-
-  setSetting({ nameKeys: 3 });
-  cacheRaw = null;
-  persist();
-  return 1;
-}
-
-function seedToday() {
-  const dp = parsedProgram();
-  if (!dp) return;
-  const ti = todayAnchorIdx();
-  if (ti >= 0) {
-    S.dayIdx = ti < dp.days.length + restSlotCount(dp) ? ti : 0;
-    return;
-  }
-  const i = dp.days.findIndex((d) => d.name.toLowerCase() === todayName());
-  S.dayIdx = i >= 0 ? i : 0;
-}
-S.draft = { text: "", start: mondayISO() };
-S.pendingFix = {};
-/* Migrations touch stored data, so a fault in one must not take the app down with it.
-   If any step throws, carry on and render what we have rather than showing a dead screen. */
-function migrateAnchor() {
-  (S.programs || []).forEach(function (pr) {
-    if (!pr.start || !pr.raw) return;
-    let dp;
-    try {
-      dp = parseProgram(pr.raw);
-    } catch (e) {
-      return;
-    }
-    if (!isNumberedDp(dp)) return;
-    const a = new Date(pr.start + "T00:00:00");
-    if (isNaN(a.getTime()) || (a.getDay() + 6) % 7 === 0) return; /* Monday anchor: buckets already agree */
-    /* sessions were stranded by the same rounding fault as week entries,
-       so both stores get the same heal; mergeInto keeps whichever record
-       logged more work when a day was saved again in the meantime */
-    ["weeks", "sessions"].forEach(function (bucket) {
-      const store = S.log[bucket] || {};
-      Object.keys(store).forEach(function (bk) {
-        const bd = new Date(bk + "T00:00:00");
-        const t = Math.max(0, Math.floor(Math.round((bd - a) / 86400000) / 7));
-        const tgt = new Date(a);
-        tgt.setDate(tgt.getDate() + t * 7);
-        const tk = ymd(tgt);
-        if (tk === bk) return;
-        const src = store[bk];
-        const carry = {};
-        Object.keys(src).forEach(function (k) {
-          if (k.indexOf(pr.id + ":") !== 0) return;
-          carry[k] = src[k];
-          delete src[k];
-        });
-        if (Object.keys(carry).length) {
-          store[tk] = store[tk] || {};
-          mergeInto(store[tk], carry, bucket);
-        }
-        if (!Object.keys(src).length) delete store[bk];
-      });
-    });
-  });
-}
-let bootTrouble = "";
-try {
-  migrateKeys();
-  migrateAnchor();
-} catch (e) {
-  bootTrouble += "slot migration failed. ";
-}
-try {
-  migrateNameKeys();
-  migrateNameKeys3();
-} catch (e) {
-  bootTrouble += "name migration failed. ";
-}
-try {
-  migrateWeekKeys();
-} catch (e) {
-  bootTrouble += "week migration failed. ";
-}
-try {
-  seedToday();
-} catch (e) {
-  bootTrouble += "day selection failed. ";
-}
-try {
-  applyTheme();
-} catch (e) {}
-try {
-  dockInit();
-  render();
-  appAlive = true;
-} catch (e) {
-  /* last resort: drop the custom theme and any half-applied view state, then try once more */
-  try {
-    S.sheet = null;
-    S.editing = null;
-    S.tab = "train";
-    dockInit();
-    render();
-    appAlive = true;
-  } catch (e2) {
-    ironFail("render", e2 && e2.message, 0, 0, e2 && e2.stack);
-  }
-}
-if (bootTrouble) {
-  try {
-    const bar = document.createElement("div");
-    bar.className = "nag";
-    bar.textContent = bootTrouble + "Your data is intact — take a backup and tell Claude.";
-    const app = document.getElementById("app");
-    if (app && app.firstChild) app.insertBefore(bar, app.firstChild.nextSibling);
-  } catch (e) {}
-}
-
-/* ===== offline ===== */
-function setOffline(txt) {
-  offlineState = txt;
-  const el = document.getElementById("offline-state");
-  if (el) el.textContent = txt;
-}
-if (!("serviceWorker" in navigator)) {
-  setOffline("Not supported by this browser");
-} else if (location.protocol === "https:") {
-  navigator.serviceWorker
-    .register("sw.js")
-    .then(function () {
-      setOffline("Ready \u2014 opens with no signal");
-    })
-    .catch(function () {
-      setOffline("Could not cache (sw.js missing?)");
-    });
-} else if (location.protocol === "file:") {
-  setOffline("Already local \u2014 no caching needed");
-} else {
-  setOffline("Needs an https address");
-}
-
-/* The app opens from the page stored on the phone, and sw.js fetches a fresh
-   one behind it. When that brings a different build, offer a reload instead of
-   swapping the app out mid-set. Two routes in, so neither can be missed: the
-   worker says so the moment it has stored it, and the page also checks the
-   stored copy itself a few seconds after opening and whenever it comes back to
-   the foreground - between sets, the phone is usually locked. */
-/* Found in the first few seconds after opening, before a single tap, an
-   update is simply applied: the screen blinks while you are still reaching
-   for it and you land on the new build. Any later - weak signal, or you have
-   started - and it waits for the button, because a reload between sets is the
-   one moment it must not happen. Coming back from the background never
-   auto-applies: performance.now() keeps counting from the original launch.
-
-   Each build gets one automatic reload per session. If a reload ever landed
-   on a page that still did not match - one not served by the worker, say -
-   the next offer would trigger another, and another; the guard makes the
-   second one a button instead. */
-const AUTO_MS = 3000;
-const AUTO_KEY = "ironlog.autoReload";
-let touchedYet = false;
-["pointerdown", "touchstart", "keydown"].forEach(function (t) {
-  window.addEventListener(
-    t,
-    function () {
-      touchedYet = true;
-    },
-    { capture: true, passive: true, once: true }
+        : "Last backup " + daysSinceBackup() + (daysSinceBackup() === 1 ? " day" : " days") + " ago") +
+    "<span>&rsaquo;</span></button>" +
+    '<div class="eyebrow" style="margin-top:24px">Dashboard</div>' +
+    '<div class="tiles">' +
+    tile("pbs", "Personal bests", "medal", "Best set per lift, est. 1RM") +
+    tile("measures", "Measures", "trend", "Body weight and weekly tonnage") +
+    tile("calendar", "Calendar", "cal", "Every session, by day") +
+    tile("style", "Style", "sliders", esc((THEMES[settings().theme] || THEMES.ember).name) + " \u00b7 your colours") +
+    tile("settings", "Settings", "gear", "Units, rest timer, backup") +
+    "</div>" +
+    "</div>"
   );
-});
+}
 
-function ownBuild() {
-  const m = document.querySelector('meta[name="build"]');
-  return m ? m.content : null;
-}
-function offerUpdate(build) {
-  if (!build || build === ownBuild() || build === updateHidden || build === updateReady) return;
-  if (!touchedYet && performance.now() < AUTO_MS) {
-    let tried = null;
-    let guarded = true;
-    try {
-      tried = sessionStorage.getItem(AUTO_KEY);
-      if (tried !== build) sessionStorage.setItem(AUTO_KEY, build);
-    } catch (e) {
-      guarded = false; /* no way to stop a loop, so no automatic reload */
-    }
-    if (guarded && tried !== build) {
-      location.reload();
-      return;
-    }
+const WDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+
+/* The date a session belongs to: the training day, never the moment the log
+   button happened to be pressed. Weekday-named program days pin to their day
+   in the logged week; anything else (grab-and-go, "Day 3") gets today. */
+function sessionDayISO(wk, day, gg) {
+  if (gg) return todayISO();
+  const nm = String(day.name || "");
+  const m = new Date(wk + "T00:00:00");
+  const wd = WDAYS.indexOf(nm.toLowerCase());
+  if (wd >= 0) {
+    m.setDate(m.getDate() + wd);
+    return ymd(m);
   }
-  updateReady = build;
-  render();
+  const dn = nm.match(/^day\s*(\d+)/i);
+  if (dn) {
+    /* the week bucket is the period anchor, so Day N is anchor + N-1 */
+    m.setDate(m.getDate() + Math.min(+dn[1] - 1, 6));
+    return ymd(m);
+  }
+  return todayISO();
 }
-function checkStoredBuild() {
-  if (!window.caches) return;
-  caches
-    .match(location.href, { ignoreSearch: true })
-    .then(function (r) {
-      return r ? r.text() : "";
-    })
-    .then(function (t) {
-      const m = /<meta name="build" content="([^"]+)"/.exec(t);
-      if (m) offerUpdate(m[1]);
-    })
-    .catch(function () {});
-}
-if (navigator.serviceWorker) {
-  navigator.serviceWorker.addEventListener("message", function (ev) {
-    if (ev.data && ev.data.type === "ironlog-update") offerUpdate(ev.data.build);
+
+function calSessions() {
+  const map = {};
+  sessionHistory(100000).forEach(function (r) {
+    (map[r.d] = map[r.d] || []).push(r);
   });
-  /* WebKit can hold worker messages until the page opts in, and a listener
-     added this way does not opt in by itself */
-  if (navigator.serviceWorker.startMessages) {
-    try { navigator.serviceWorker.startMessages(); } catch (e) {}
+  return map;
+}
+
+function vCalendar() {
+  const now = new Date();
+  const cm = S.calM || now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+  const y = +cm.slice(0, 4), m = +cm.slice(5, 7) - 1;
+  const first = new Date(y, m, 1);
+  const days = new Date(y, m + 1, 0).getDate();
+  const lead = (first.getDay() + 6) % 7; /* Monday first */
+  const map = calSessions();
+  const selD = S.calD || ymd(now);
+  let cells = "";
+  for (let i = 0; i < lead; i++) cells += '<span class="cald off"></span>';
+  for (let d2 = 1; d2 <= days; d2++) {
+    const iso = cm + "-" + String(d2).padStart(2, "0");
+    const has = !!map[iso];
+    cells +=
+      '<button class="cald' + (has ? " has" : "") + (iso === selD ? " sel" : "") + (iso === ymd(now) ? " now" : "") +
+      '" data-act="cal-day" data-d="' + iso + '"><b class="tnum">' + d2 + "</b>" +
+      (has ? "<i></i>" : "") + "</button>";
   }
-  setTimeout(checkStoredBuild, 6000);
+  const sel = map[selD] || [];
+  const sd = new Date(selD + "T00:00:00");
+  const detail =
+    '<div class="block mt2 caldetail"><div class="eyebrow">' +
+    esc(sd.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })) + "</div>" +
+    (sel.length
+      ? sel.map(function (r) {
+          const title = r.gg ? r.pn : r.dn || r.pn;
+          const sub = r.gg ? "Grab-and-go" : r.pn;
+          return (
+            '<button class="hrow" style="width:100%;text-align:left" data-act="sess-open" data-wk="' + esc(r.wk) + '" data-k="' + esc(r.k) + '">' +
+            '<div class="grow"><div class="hname">' + esc(title) + "</div>" +
+            '<div class="hsub">' + esc(sub) + "</div></div>" +
+            '<div class="hstats tnum">' + plu(r.sets || 0, "set") +
+            (r.volume ? "<br><span>" + Math.round(r.volume).toLocaleString() + " " + U() + "</span>" : "") +
+            '</div><svg class="hchev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg></button>'
+          );
+        }).join("")
+      : '<p style="color:var(--faint);font-size:13px;margin:10px 0 0">Rest day &mdash; nothing logged.</p>') +
+    "</div>";
+  return (
+    '<div class="wrap pad calpage">' +
+    '<div class="calbar">' +
+    '<div class="calmonth"><b>' + esc(first.toLocaleDateString(undefined, { month: "long" })) + "</b><span>" + y + "</span></div>" +
+    '<button class="calnav" data-act="cal-prev" aria-label="Previous month"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg></button>' +
+    '<button class="calnav" data-act="cal-next" aria-label="Next month"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg></button>' +
+    '<button class="caltoday" data-act="cal-today">Today</button></div>' +
+    '<div class="calhead">' + ["M","T","W","T","F","S","S"].map(function (x) { return "<span>" + x + "</span>"; }).join("") + "</div>" +
+    '<div class="cal">' + cells + "</div>" +
+    detail +
+    "</div>"
+  );
+}
+
+function vPBs() {
+  return (
+    '<div class="wrap pad pbpage">' +
+    bestsList() +
+    '<button class="dash mt" data-act="pb-new">+ Add a personal best</button>' +
+    '<p style="color:var(--faint);font-size:12px;line-height:1.6;margin-top:14px">Built from every ticked ' +
+    "set, so restoring a backup fills this in. Edit a row to correct a name or to record something you did " +
+    "before you started tracking.</p>" +
+    "</div>"
+  );
+}
+
+function vMeasures() {
+  const ton = weeklyTonnage(8);
+  const body = bodySeries(20);
+  const last = body.length ? body[body.length - 1].v : "";
+  const fmtT = (v) => Math.round(v).toLocaleString() + " " + U();
+  return (
+    '<div class="wrap pad measpage">' +
+    '<div class="eyebrow">Body weight</div>' +
+    '<div class="block mt"><div class="row">' +
+    '<div class="grow"><div class="bigno tnum">' + (last || "&mdash;") +
+    '</div><div class="eyebrow" style="margin-top:4px">' + U() + " today</div></div>" +
+    '<label class="fld" style="max-width:120px"><input class="tnum" inputmode="decimal" placeholder="' +
+    (last || "0") + '" value="' + esc(S.log.body && S.log.body[todayISO()] != null ? S.log.body[todayISO()] : "") +
+    '" data-in="bodyw"><em>' + U() + "</em></label></div>" +
+    '<div class="chart">' + lineChart(body) + "</div>" +
+    '<p style="color:var(--faint);font-size:12px;margin:10px 0 0">Logged against today\'s date. ' +
+    "Type over it to correct today's entry.</p></div>" +
+
+    '<div class="mt3"><div class="eyebrow">Weekly tonnage</div>' + vTonnage(ton) + "</div>" +
+    "</div>"
+  );
+}
+
+function vTonnage(ton) {
+  if (!ton.length)
+    return '<div class="block mt"><p style="color:var(--faint);font-size:13px;margin:0">Nothing logged yet. ' +
+      "Tonnage is weight times reps, added up across every ticked set.</p></div>";
+  const sel = ton.some(function (t) { return t.week === S.tonSel; })
+    ? S.tonSel
+    : ton[ton.length - 1].week;
+  const max = Math.max.apply(null, ton.map(function (t) { return t.v; })) || 1;
+  const bars = ton.map(function (t) {
+    const d = new Date(t.week + "T00:00:00");
+    const lab = d.getDate() + "/" + (d.getMonth() + 1);
+    return (
+      '<div class="tbar' + (t.week === sel ? " on" : "") + '" role="button" data-act="ton-week" data-w="' + t.week + '">' +
+      '<span class="tval tnum">' + (t.v >= 10000 ? Math.round(t.v / 1000) + "k" : t.v.toLocaleString()) + "</span>" +
+      '<span class="tcol"><i style="height:' + Math.max(6, Math.round((t.v / max) * 100)) + '%"></i></span>' +
+      '<span class="tbarlab tnum">' + lab + "</span></div>"
+    );
+  }).join("");
+  const cur = ton.find(function (t) { return t.week === sel; });
+  const sess = S.log.sessions[sel] || {};
+  const sk = Object.keys(sess);
+  let best = null;
+  sk.forEach(function (k) {
+    const r = sess[k];
+    if (r && r.volume && (!best || r.volume > best.volume)) best = r;
+  });
+  const d0 = new Date(sel + "T00:00:00");
+  const bestName = best ? (best.gg ? best.pn : best.dn || best.pn) : "";
+  return (
+    '<div class="tonrow">' + bars + "</div>" +
+    '<div class="block mt">' +
+    '<div class="eyebrow">w/c Mon ' + esc(d0.toLocaleDateString(undefined, { day: "numeric", month: "short" })) + "</div>" +
+    '<div class="tonbig tnum">' + cur.v.toLocaleString() + " " + U() + "</div>" +
+    '<div style="color:var(--mute);font-size:13px;margin-top:4px">' +
+    (sk.length
+      ? sk.length + (sk.length === 1 ? " session logged" : " sessions logged") +
+        (best && bestName ? " \u00b7 biggest: " + esc(bestName) + ", " + Math.round(best.volume).toLocaleString() + " " + U() : "")
+      : "No sessions logged this week \u2014 tonnage still counts every ticked set.") +
+    "</div>" +
+    '<p style="color:var(--faint);font-size:12px;margin:10px 0 0">Weight times reps across every ticked set. ' +
+    "Tap a bar to inspect a week.</p></div>"
+  );
+}
+
+
+function bestsList() {
+  const best = effectiveBests();
+  const idx = dayTitleIndex();
+  const keys = Object.keys(best);
+  if (!keys.length)
+    return '<div class="block mt"><p style="color:var(--faint);font-size:13px;margin:0">Log some weights, ' +
+      "or add a best you already hold, and it shows up here.</p></div>";
+
+  keys.forEach(function (k) {
+    best[k].cat = catOf(k, best[k].name, idx);
+  });
+  const q = (S.pbQuery || "").trim().toLowerCase();
+  const open = S.pbOpen || (S.pbOpen = {});
+
+  const row = function (k) {
+    const b = best[k];
+    const rm = oneRM(b.w, b.r);
+    const r3 = threeRM(b.w, b.r);
+    return (
+      '<button class="pbrow" style="width:100%;text-align:left" data-act="pb-edit" data-k="' + k + '">' +
+      '<div class="grow"><div style="font-size:15px;font-weight:600">' + esc(b.name) + "</div>" +
+      '<div class="tnum" style="color:var(--faint);font-size:12px">' +
+      (b.src === "manual" ? "Entered by hand" : esc(weekTag(b.week))) +
+      (r3 || rm ? " · est." : "") +
+      (r3 ? " 3RM " + r3 + " " + U() : "") +
+      (rm ? " · 1RM " + rm + " " + U() : "") + "</div></div>" +
+      '<div class="count tnum pbval">' + b.w + " " + U() +
+      (b.r ? " \u00d7 " + b.r : "") + "</div>" +
+      '<span class="pbedit" aria-hidden="true">&#9998;</span></button>'
+    );
+  };
+
+  const search =
+    '<label class="fld pbsearch"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-3.5-3.5"></path></svg><input placeholder="Search a lift" value="' +
+    esc(S.pbQuery || "") + '" data-in="pb-search">' +
+    (q ? '<button data-act="pb-search-clear" style="color:var(--faint);font-size:16px">&times;</button>' : "") +
+    "</label>";
+
+  /* searching cuts straight through the groups */
+  if (q) {
+    const hits = keys
+      .filter(function (k) {
+        return best[k].name.toLowerCase().indexOf(q) >= 0;
+      })
+      .sort(function (a, b) {
+        return best[b].w - best[a].w;
+      });
+    return (
+      search +
+      (hits.length
+        ? '<div class="tnum" style="color:var(--faint);font-size:12px;margin-top:12px">' + hits.length +
+          (hits.length === 1 ? " match" : " matches") + "</div>" +
+          '<div class="pblist" style="margin-top:8px">' + hits.map(row).join("") + "</div>"
+        : '<div class="block mt"><p style="color:var(--faint);font-size:13px;margin:0">Nothing matches "' +
+          esc(S.pbQuery) + '".</p></div>')
+    );
+  }
+
+  /* otherwise every group starts shut */
+  const groups = CATS.map(function (c) {
+    const inCat = keys
+      .filter(function (k) {
+        return best[k].cat === c[0];
+      })
+      .sort(function (a, b) {
+        return best[b].w - best[a].w;
+      });
+    if (!inCat.length) return "";
+    const isOpen = !!open[c[0]];
+    const top = best[inCat[0]];
+    return (
+      '<div class="catgrp' + (isOpen ? " on" : "") + '">' +
+      '<button class="cathead" data-act="pb-toggle" data-c="' + c[0] + '">' +
+      '<span class="grow">' + c[1] + "</span>" +
+      '<span class="sub tnum">' + inCat.length +
+      (isOpen ? "" : " · top " + top.w + " " + U()) + "</span>" +
+      '<span class="caret' + (isOpen ? " on" : "") + '">&#8250;</span></button>' +
+      (isOpen ? '<div class="pblist" style="padding:0 4px 4px">' + inCat.map(row).join("") + "</div>" : "") +
+      "</div>"
+    );
+  }).join("");
+
+  return search + '<div class="cats">' + groups + "</div>";
+}
+
+function vPBSheet() {
+  const p = S.sheet;
+  return sheetShell(
+    p.isNew ? "New entry" : "Personal best",
+    p.isNew ? "Add a best" : esc(p.name || "Edit"),
+    '<label class="fld"><input placeholder="Exercise name" value="' + esc(p.name) +
+      '" data-in="pb-name"></label>' +
+      '<div class="row" style="gap:8px;margin-top:10px">' +
+      '<label class="fld grow"><input class="tnum" inputmode="decimal" placeholder="180" value="' +
+      esc(p.w) + '" data-in="pb-w"><em>' + U() + "</em></label>" +
+      '<label class="fld grow"><input class="tnum" inputmode="numeric" placeholder="6" value="' +
+      esc(p.r) + '" data-in="pb-r"><em>reps</em></label></div>' +
+      '<div class="mt2"><div class="eyebrow">Category</div><div class="chips" style="margin-top:8px">' +
+      CATS.map(function (c) {
+        return (
+          '<button class="pchip' + (p.cat === c[0] ? " on" : "") + '" data-act="pb-setcat" data-c="' +
+          c[0] + '">' + c[1] + "</button>"
+        );
+      }).join("") + "</div></div>" +
+      (p.src === "logged"
+        ? '<p class="warn" style="margin-top:14px">This came from a logged set. Saving a different figure ' +
+          "keeps your log untouched and shows your entry instead.</p>"
+        : "") +
+      '<div class="row" style="gap:12px;margin-top:20px">' +
+      (p.isNew
+        ? ""
+        : '<button class="btn-ghost" data-act="pb-remove">Remove</button>') +
+      '<button class="btn-primary" data-act="pb-save">Save</button></div>'
+  );
+}
+
+/* Away from Train, the program and week are noise. Keep a slim bar so content
+   still clears the status bar and the Dynamic Island. */
+function vTabHead(title) {
+  return (
+    '<div class="hdr slim tabhead"><div class="wrap"><h1 class="tabttl">' + esc(title) + "</h1></div></div>"
+  );
+}
+
+function vSubHead(title) {
+  return (
+    '<div class="hdr slim tabhead subhead"><div class="wrap">' +
+    '<button class="backbtn" data-act="page" data-p="" aria-label="Back to Profile">' +
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg><span>Profile</span></button>' +
+    '<h1 class="tabttl">' + esc(title) + "</h1></div></div>"
+  );
+}
+
+const DOCK_TABS = [
+  ["library", "Programs", "layers"],
+  ["train", "Train", "dumbbell"],
+  ["profile", "Profile", "user"],
+];
+
+/* The dock lives outside #app and is never rebuilt, so the lens can glide. */
+function dockInit() {
+  if (document.getElementById("dock")) return;
+  const d = document.createElement("nav");
+  d.id = "dock";
+  d.className = "dock hide";
+  d.innerHTML =
+    '<div class="lens"></div>' +
+    DOCK_TABS.map(function (x) {
+      return (
+        '<button data-act="tab" data-t="' + x[0] + '"><i>' + ICON[x[2]] +
+        "<span>" + x[1] + "</span></i></button>"
+      );
+    }).join("");
+  document.body.appendChild(d);
+  dockTouch(d);
+}
+
+function dockSync(show) {
+  const d = document.getElementById("dock");
+  if (!d) return;
+  d.classList.toggle("hide", !show);
+  if (!show) return;
+  const btns = d.querySelectorAll("button");
+  const i = Math.max(0, DOCK_TABS.findIndex(function (x) { return x[0] === S.tab; }));
+  btns.forEach(function (b, j) {
+    b.classList.toggle("on", j === i);
+    b.querySelector("i").style.transform = j === i ? "scale(1.12)" : "";
+  });
+  const lens = d.querySelector(".lens");
+  const first = d.dataset.i === undefined;
+  if (first) lens.style.transition = "none";
+  dockLensTo(d, i);
+  if (first) {
+    void lens.offsetWidth;
+    lens.style.transition = "";
+  }
+  d.dataset.i = i;
+}
+
+function dockLensTo(d, i) {
+  const lens = d.querySelector(".lens");
+  const inner = d.clientWidth - 12; /* padding */
+  const w = inner / DOCK_TABS.length;
+  lens.style.width = w + "px";
+  lens.style.transform = "translateX(" + i * w + "px)";
+}
+
+function dockTouch(d) {
+  let dragging = false, moved = false, startX = 0;
+  const lens = d.querySelector(".lens");
+  const near = (x) => {
+    const r = d.getBoundingClientRect();
+    const inner = r.width - 12;
+    const w = inner / DOCK_TABS.length;
+    return { r: r, w: w, i: Math.max(0, Math.min(DOCK_TABS.length - 1, Math.floor((x - r.left - 6) / w))) };
+  };
+  d.addEventListener("touchstart", function (e) {
+    dragging = true;
+    moved = false;
+    startX = e.touches[0].clientX;
+    lens.style.transition = "none";
+  }, { passive: true });
+  d.addEventListener("touchmove", function (e) {
+    if (!dragging) return;
+    const x = e.touches[0].clientX;
+    if (Math.abs(x - startX) > 6) moved = true;
+    const n = near(x);
+    const px = Math.max(0, Math.min(n.r.width - 12 - n.w, x - n.r.left - 6 - n.w / 2));
+    lens.style.transform = "translateX(" + px + "px)";
+    /* magnify what the lens hovers */
+    d.querySelectorAll("button").forEach(function (b) {
+      const br = b.getBoundingClientRect();
+      const c = br.left + br.width / 2;
+      const t = Math.max(0, 1 - Math.abs(x - c) / (br.width * 1.15));
+      b.querySelector("i").style.transform = "scale(" + (1 + 0.26 * t) + ") translateY(" + -3 * t + "px)";
+    });
+  }, { passive: true });
+  d.addEventListener("touchend", function (e) {
+    if (!dragging) return;
+    dragging = false;
+    lens.style.transition = "";
+    const x = (e.changedTouches[0] || {}).clientX || startX;
+    const n = near(x);
+    if (moved) {
+      const btn = d.querySelectorAll("button")[n.i];
+      btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    } else {
+      dockSync(true); /* plain tap: let the native click land, just settle the lens */
+    }
+  });
+  /* iOS cancels instead of ending when the system claims the gesture (the
+     home-bar swipe sits right under the dock); without this the lens froze
+     mid-drag with its glide switched off and the icons left magnified */
+  d.addEventListener("touchcancel", function () {
+    if (!dragging) return;
+    dragging = false;
+    lens.style.transition = "";
+    dockSync(true);
+  });
+  /* belt and braces: whatever happened while away, come back settled */
+  function settle() {
+    dragging = false;
+    lens.style.transition = "";
+    if (!d.classList.contains("hide")) dockSync(true);
+  }
   document.addEventListener("visibilitychange", function () {
-    if (document.visibilityState === "visible") checkStoredBuild();
+    if (document.visibilityState === "visible") settle();
+  });
+  window.addEventListener("pageshow", settle);
+  window.addEventListener("resize", function () {
+    if (!dragging && !d.classList.contains("hide")) dockSync(true); /* lens width follows the dock */
   });
 }
 
-</script>
-</body>
-</html>
+function vNavUnused() {
+  return (
+    ""
+  );
+}
+
+/* ===== sheets ===== */
+
+function sheetShell(eyebrow, title, body) {
+  return (
+    '<div class="scrim" data-act="sheet-bg"><div class="sheet"><i class="grabber" aria-hidden="true"></i><div class="wrap">' +
+    '<div class="sheet-hd"><div>' +
+    (eyebrow ? '<div class="eyebrow on">' + esc(eyebrow) + "</div>" : "") +
+    "<h2>" + esc(title) + "</h2></div>" +
+    '<button class="sheet-x" data-act="sheet-close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button></div>' +
+    '<div class="sheet-body">' + body + "</div></div></div></div>"
+  );
+}
+
+function summaryText(day, stats, dateLabel) {
+  const out = [
+    (day.title || day.name) + " · " + dateLabel,
+    plu(stats.setsDone, "set") + (stats.volume ? " · " + stats.volume.toLocaleString() + " kg lifted" : ""),
+    "",
+  ];
+  stats.lines.forEach((l) => {
+    out.push(
+      l.name + " — " + l.done + "/" + l.total + (l.best ? " · best " + l.best.w + "kg × " + l.best.r : "")
+    );
+  });
+  return out.join("\n");
+}
+
+function vSummarySheet() {
+  const dp = parsedProgram();
+  const day = dayAt(dp, S.dayIdx);
+  const stats = summarize(day, entriesFor, effWeek());
+  const session = sessionFor(day.id);
+  const cells = [
+    ["Sets", stats.setsDone],
+    ["Exercises", stats.exDone + "/" + stats.exTotal],
+    [U() + " lifted", stats.volume ? stats.volume.toLocaleString() : "\u2014"],
+  ]
+    .map(
+      (c) =>
+        '<div class="stat"><b class="tnum">' + esc(c[1]) + '</b><div class="eyebrow" style="margin-top:6px">' +
+        esc(c[0]) + "</div></div>"
+    )
+    .join("");
+  const lines = stats.lines.length
+    ? stats.lines
+        .map(
+          (l) =>
+            '<div class="sumline"><div class="grow"><div style="font-size:14px;font-weight:600">' +
+            esc(l.name) + "</div>" +
+            (l.best ? '<div class="tnum" style="color:var(--mute);font-size:12px">best ' + l.best.w + " kg × " + l.best.r + "</div>" : "") +
+            '</div><div class="count tnum" style="color:' +
+            (l.done === l.total ? "var(--brass)" : "var(--faint)") + '">' + l.done + "/" + l.total + "</div></div>"
+        )
+        .join("")
+    : '<div style="color:var(--faint);font-size:14px">Nothing ticked off yet. Tap the discs on each exercise as you go.</div>';
+  return sheetShell(
+    S.sheet.dateLabel,
+    day.title || day.name,
+    '<div class="stats">' + cells + "</div>" +
+      (stats.unweighted
+        ? '<p class="tnum" style="color:var(--faint);font-size:12px;margin-top:10px">' + stats.unweighted +
+          " ticked " + (stats.unweighted === 1 ? "set is" : "sets are") +
+          " missing weight or reps (drops included), so they are not in the volume total.</p>"
+        : "") +
+      '<div class="mt2" style="display:flex;flex-direction:column;gap:8px">' + lines + "</div>" +
+      '<div class="row mt3" style="gap:12px">' +
+      '<button class="btn-ghost" data-act="copy-summary">Copy</button>' +
+      '<button class="btn-primary" data-act="log-session">' +
+      (session ? "Save changes" : "Log this session") + "</button></div>" +
+      /* the riskiest moment for a phone-only log is right after a session */
+      '<button class="dash" style="height:46px;margin-top:12px" data-act="sum-backup">' +
+      (daysSinceBackup() === 0 ? "Backed up today \u2713" : "Save a backup of everything") + "</button>" +
+      '<p style="color:var(--faint);font-size:12px;line-height:1.5;margin:10px 0 0">' +
+      (daysSinceBackup() === null
+        ? "Nothing is backed up yet. This log lives only on this device, and deleting the home-screen icon deletes it."
+        : daysSinceBackup() === 0
+        ? "Kept somewhere off this device, your log survives a lost or reset phone."
+        : "Last backup was " + plu(daysSinceBackup(), "day") + " ago.") + "</p>"
+  );
+}
+
+function vProgramSheet() {
+  return sheetShell(
+    "Switch program",
+    "Your programs",
+    '<div style="display:flex;flex-direction:column;gap:12px">' +
+      S.programs.map((p) => vProgramRow(p, { del: false })).join("") +
+      '<div class="row" style="gap:12px">' +
+        '<button class="dash grow" data-act="new-prog">Paste text</button>' +
+        '<button class="dash grow" data-act="build-new">Build one</button></div></div>'
+  );
+}
+
+/* ===== confirm unclear exercises ===== */
+
+function vReviewSheet() {
+  const dp = parsedProgram();
+  const list = unclearList(dp);
+  const rows = list.length
+    ? list
+        .map(
+          (x, i) =>
+            '<div class="rev"><div class="nm">' + esc(x.name) + "</div>" +
+            '<div class="where">' + esc(x.day) + "</div>" +
+            '<div class="flds">' +
+            '<label class="fld"><input class="tnum" inputmode="numeric" placeholder="3" ' +
+            'data-in="fix-sets" data-n="' + esc(x.name) + '"><em>sets</em></label>' +
+            '<label class="fld"><input class="tnum" inputmode="text" placeholder="12" ' +
+            'data-in="fix-reps" data-n="' + esc(x.name) + '"><em>reps</em></label>' +
+            '<button class="badge" data-act="fix-skip" data-n="' + esc(x.name) + '">Leave it</button>' +
+            "</div></div>"
+        )
+        .join("")
+    : '<p style="color:var(--mute);font-size:14px">Nothing left to confirm &mdash; every exercise has sets and reps.</p>';
+  return sheetShell(
+    "Couldn't read these",
+    "Confirm sets & reps",
+    (list.length
+      ? '<p style="color:var(--mute);font-size:13px;line-height:1.6;margin:0 0 4px">These lines had no sets ' +
+        "or reps in the pasted text. Fill in what you do, or leave them as a single tick.</p>"
+      : "") +
+      rows +
+      (list.length
+        ? '<button class="btn-primary" style="margin-top:20px" data-act="fix-save">Save</button>'
+        : "")
+  );
+}
+
+function vRestoreSheet() {
+  return sheetShell(
+    "From a backup",
+    "Restore",
+    '<p style="color:var(--mute);font-size:13px;line-height:1.6;margin:0 0 12px">Paste the contents of a ' +
+      "backup file below, or pick the file you downloaded. This replaces everything "+ "currently in the app.</p>" +
+      '<label class="dash" style="margin:0 0 12px;cursor:pointer">Choose a backup file' + '<input type="file" accept="application/json,.json" data-in="restore-file"' + ' style="display:none"></label>' +

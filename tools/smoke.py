@@ -17,6 +17,7 @@ import socketserver
 import sys
 import threading
 
+TOOLS = os.path.dirname(os.path.abspath(__file__))  # captured before serve() changes directory
 SW_TAIL_BUDGET = 200  # sw.js only caches a page whose </html> lands this near the end
 
 
@@ -154,6 +155,19 @@ def main():
         sys.exit(1)
 
     print("Smoke test passed: app boots, renders, parses a program, and survives a reload.")
+
+    # Behaviour regression: logging, ghost values, drops, menus, swipe, search,
+    # themes and contrast, the session sheet, count wording. See tools/regress.py.
+    sys.path.insert(0, TOOLS)
+    import regress
+
+    res = regress.run("http://localhost:%d/%s" % (port, filename))
+    if res.failed:
+        print("Regression checks FAILED (%d passed, %d failed) - not publishing:" % (res.passed, len(res.failed)))
+        for f in res.failed:
+            print("  - " + f[:300])
+        sys.exit(1)
+    print("Regression checks passed: %d checks." % res.passed)
     return 0
 
 

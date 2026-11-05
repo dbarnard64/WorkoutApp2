@@ -1,0 +1,32 @@
+}
+function checkStoredBuild() {
+  if (!window.caches) return;
+  caches
+    .match(location.href, { ignoreSearch: true })
+    .then(function (r) {
+      return r ? r.text() : "";
+    })
+    .then(function (t) {
+      const m = /<meta name="build" content="([^"]+)"/.exec(t);
+      if (m) offerUpdate(m[1]);
+    })
+    .catch(function () {});
+}
+if (navigator.serviceWorker) {
+  navigator.serviceWorker.addEventListener("message", function (ev) {
+    if (ev.data && ev.data.type === "ironlog-update") offerUpdate(ev.data.build);
+  });
+  /* WebKit can hold worker messages until the page opts in, and a listener
+     added this way does not opt in by itself */
+  if (navigator.serviceWorker.startMessages) {
+    try { navigator.serviceWorker.startMessages(); } catch (e) {}
+  }
+  setTimeout(checkStoredBuild, 6000);
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") checkStoredBuild();
+  });
+}
+
+</script>
+</body>
+</html>
