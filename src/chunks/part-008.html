@@ -255,6 +255,9 @@ const PAIRINGS = [
 /* accent + pop on top of any theme, with a live preview drawn from the CSS variables */
 function vCustomise(st) {
   const t = THEMES[st.theme] || THEMES.ember;
+  if (t.fixed)
+    return '<div class="block mt2 custom"><div class="eyebrow">Make it yours</div>' +
+      '<p class="cnote">' + esc(t.name) + " is a fixed palette. Pick a theme above to use your own accent and pop.</p></div>";
   const cur = function (v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); };
   const row = function (label, key, presets, act, resetAct, resetId, labelId) {
     const val = st[key];
@@ -294,22 +297,26 @@ function vCustomise(st) {
 }
 function vStyle() {
   const st = settings();
-  const themeCards = Object.keys(THEMES)
-    .map((k) => {
+  const card = (k) => {
       const t = THEMES[k];
       return (
-        '<button class="sw' + (st.theme === k || (!st.theme && k === "ember") ? " on" : "") +
-        '" data-act="theme" data-k="' + k + '" style="background:' + t.panel + ";color:" + t.chalk + '"><b>' + esc(t.name) + "</b>" +
+        '<button class="sw' + (t.fixed ? " fx" : "") + (st.theme === k || (!st.theme && k === "ember") ? " on" : "") +
+        '" data-act="theme" data-k="' + k + '" style="background:' + (t.fixed ? t.ink : t.panel) + ";color:" + t.chalk + '"><b>' + esc(t.name) + "</b>" +
         '<span class="dots"><i style="background:' + t.brass + '"></i>' +
         '<i style="background:' + t.pop + '"></i></span></button>'
       );
-    })
-    .join("");
+    };
+  const keys = Object.keys(THEMES);
+  const themeCards = keys.filter((k) => !THEMES[k].fixed).map(card).join("");
+  const paletteCards = keys.filter((k) => THEMES[k].fixed).map(card).join("");
 
   return (
     '<div class="wrap pad">' +
     '<div class="eyebrow">Appearance</div>' +
     '<div class="swatches">' + themeCards + "</div>" +
+    '<div class="eyebrow mt2">Palettes</div>' +
+    '<p class="palnote">Full-colour sets: background, accent and pop come together and stay fixed.</p>' +
+    '<div class="swatches">' + paletteCards + "</div>" +
     vCustomise(st) +
 
     "</div>"

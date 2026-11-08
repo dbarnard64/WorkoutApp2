@@ -357,12 +357,66 @@ const THEMES = {
   mono: { name: "Graphite", ink: "#0A0A0A", panel: "#161616", panel2: "#202020", line: "#2C2C2C",
     chalk: "#F5F5F5", mute: "#B8B8B8", faint: "#8F8F8F", brass: "#F2F2F2", brassDim: "#7E7E7E",
     onAccent: "#0B0B0F", rest: "#5E8C6A", done: "#F2F2F2", pop: "#FF6A1A" },
+  mocha: { name: "Mocha Night", ink: "#0A0A0A", panel: "#2A2818", panel2: "#383526", line: "#484435",
+    chalk: "#F0E5DB", mute: "#B5ACA0", faint: "#A59F95", brass: "#E8D9C6", brassDim: "#797268",
+    onAccent: "#141414", rest: "#5E8C6A", done: "#E8D9C6", pop: "#FC75B4" },
+  plum: { name: "Plum Night", ink: "#0A0A0A", panel: "#2E1424", panel2: "#3C2332", line: "#4D3443",
+    chalk: "#FBEAF2", mute: "#BEAAB4", faint: "#A5929B", brass: "#FAC7E1", brassDim: "#826876",
+    onAccent: "#141414", rest: "#5E8C6A", done: "#FAC7E1", pop: "#6591FF" },
   marshmallow: { name: "Marshmallow", ink: "#FFFFFF", panel: "#F4F4F6", panel2: "#E9E9EE", line: "#D9D9E0",
     chalk: "#141418", mute: "#4A4A55", faint: "#62626D", brass: "#5B3DF5", brassDim: "#AD9EFA",
     onAccent: "#FFFFFF", rest: "#3F7A55", done: "#5B3DF5", pop: "#B01A63" },
   daylight: { name: "Daylight", ink: "#FFFFFF", panel: "#F4F4F6", panel2: "#E9E9EE", line: "#D9D9E0",
     chalk: "#141418", mute: "#4A4A55", faint: "#62626D", brass: "#96600F", brassDim: "#CAB087",
     onAccent: "#FFFFFF", rest: "#3F7A55", done: "#96600F", pop: "#0A6463" },
+  p_silent: { name: "Silent Power", ink: "#03203D", panel: "#0D2945", panel2: "#17324D", line: "#29425B",
+    chalk: "#F3F6FA", mute: "#BEC7D0", faint: "#9DA9B6", brass: "#639CC5", brassDim: "#335E81",
+    onAccent: "#141414", rest: "#5E8C6A", done: "#639CC5", pop: "#F06365",
+    main: "#639CC5", hit: "#EF3A3D", onHit: "#141414", fixed: true },
+  p_charcoal: { name: "Charcoal Royal", ink: "#21232E", panel: "#292B36", panel2: "#33353F", line: "#43454F",
+    chalk: "#F5F6FA", mute: "#C6C8CD", faint: "#A9AAB1", brass: "#6193FF", brassDim: "#183F96",
+    onAccent: "#FFFFFF", rest: "#5E8C6A", done: "#6193FF", pop: "#FE8500",
+    main: "#105BFF", hit: "#FE8500", onHit: "#141414", fixed: true },
+  p_abyss: { name: "Midnight Abyss", ink: "#0B1B2C", panel: "#142434", panel2: "#1E2E3E", line: "#303E4D",
+    chalk: "#F0F6FA", mute: "#BEC6CD", faint: "#9EA7B0", brass: "#4FE3C8", brassDim: "#2D7F7A",
+    onAccent: "#141414", rest: "#5E8C6A", done: "#4FE3C8", pop: "#FF9EC7",
+    main: "#4FE3C8", hit: "#FF9EC7", onHit: "#141414", fixed: true },
+  p_sand: { name: "Soft Sand", ink: "#F0E5DB", panel: "#F8F2ED", panel2: "#F3EAE2", line: "#D5CBC0",
+    chalk: "#2E2C1B", mute: "#595545", faint: "#696457", brass: "#474329", brassDim: "#9C9482",
+    onAccent: "#FFFFFF", rest: "#5E8C6A", done: "#474329", pop: "#C90460",
+    main: "#474329", hit: "#FC75B4", onHit: "#141414", fixed: true },
+  p_flamingo: { name: "Flamingo", ink: "#FAC7E1", panel: "#FCE3F0", panel2: "#FBD2E7", line: "#E0AFC8",
+    chalk: "#3F1B2F", mute: "#684156", faint: "#734F62", brass: "#903D6C", brassDim: "#D086AE",
+    onAccent: "#FFFFFF", rest: "#5E8C6A", done: "#903D6C", pop: "#0046EE",
+    main: "#A5467C", hit: "#004AFD", onHit: "#FFFFFF", fixed: true },
+  p_marsh: { name: "Marshmallow Violet", ink: "#F6F2EC", panel: "#FAF8F6", panel2: "#F8F5F0", line: "#D8D3D6",
+    chalk: "#1D144E", mute: "#4D4571", faint: "#6B6487", brass: "#5B3DF5", brassDim: "#A898F0",
+    onAccent: "#FFFFFF", rest: "#5E8C6A", done: "#5B3DF5", pop: "#D00080",
+    main: "#5B3DF5", hit: "#FF6FC8", onHit: "#141414", fixed: true },
+  p_raspberry: { name: "Raspberry Pink", ink: "#CD096A", panel: "#B8085F", panel2: "#A40755", line: "#DB4E94",
+    chalk: "#FFFFFF", mute: "#FAE7F0", faint: "#FBEAF2", brass: "#FEFDFE", brassDim: "#E683B4",
+    onAccent: "#141414", rest: "#5E8C6A", done: "#FEFDFE", pop: "#ABFCE1",
+    main: "#FEFDFE", hit: "#61F9C7", onHit: "#141414", fixed: true },
+  p_maroon: { name: "Deep Maroon", ink: "#250104", panel: "#2E0B0D", panel2: "#371518", line: "#47272A",
+    chalk: "#FBF1EF", mute: "#CCBCBB", faint: "#AE9B9A", brass: "#F82E18", brassDim: "#7E0E05",
+    onAccent: "#FFFFFF", rest: "#5E8C6A", done: "#F82E18", pop: "#CDF73D",
+    main: "#D71A06", hit: "#CDF73D", onHit: "#250104", fixed: true },
+  p_azure: { name: "Azure Navy", ink: "#034A87", panel: "#03437A", panel2: "#023B6C", line: "#4A7DA9",
+    chalk: "#FFFFFF", mute: "#C8D7E5", faint: "#A4BED4", brass: "#FEFDFE", brassDim: "#80A4C2",
+    onAccent: "#141414", rest: "#5E8C6A", done: "#FEFDFE", pop: "#FEA397",
+    main: "#FEFDFE", hit: "#FD614B", onHit: "#141414", fixed: true },
+  p_obsidian: { name: "Obsidian Racer", ink: "#111217", panel: "#1A1B20", panel2: "#24252A", line: "#35363B",
+    chalk: "#F4F6F8", mute: "#C2C4C6", faint: "#A2A4A7", brass: "#DFE5EB", brassDim: "#787C81",
+    onAccent: "#111217", rest: "#5E8C6A", done: "#DFE5EB", pop: "#F1445A",
+    main: "#DFE5EB", hit: "#F2344A", onHit: "#111217", fixed: true },
+  p_violet: { name: "Electric Violet", ink: "#18181C", panel: "#212125", panel2: "#2B2B2F", line: "#3B3B40",
+    chalk: "#F5F4FA", mute: "#C4C4C9", faint: "#A5A5AA", brass: "#9972FB", brassDim: "#452A8B",
+    onAccent: "#FFFFFF", rest: "#5E8C6A", done: "#9972FB", pop: "#B9F500",
+    main: "#723BFA", hit: "#B9F500", onHit: "#141414", fixed: true },
+  p_butter: { name: "Raspberry Butter", ink: "#BC164D", panel: "#A91445", panel2: "#96123E", line: "#CF577F",
+    chalk: "#FFFFFF", mute: "#F3D8E1", faint: "#F3D7E0", brass: "#FFD5E2", brassDim: "#DE7396",
+    onAccent: "#141414", rest: "#5E8C6A", done: "#FFD5E2", pop: "#FFE164",
+    main: "#FFD0DF", hit: "#FFE164", onHit: "#141414", fixed: true },
 };
 
 /* a green or teal accent would be hard to tell apart from the sage "done" colour */
@@ -424,19 +478,23 @@ function applyTheme() {
   const t = THEMES[st.theme] || THEMES.ember;
   const r = document.documentElement.style;
   Object.keys(t).forEach((k) => {
-    if (k !== "name") r.setProperty("--" + k, t[k]);
+    if (k !== "name" && k !== "fixed") r.setProperty("--" + k, t[k]);
   });
   /* "done" is its own colour only in themes that define one; elsewhere it
      follows the accent, exactly as before */
   r.setProperty("--done", t.done || t.brass);
-  if (st.accent) {
+  if (st.accent && !t.fixed) {
     const a = fitContrast(st.accent, t.panel);
     r.setProperty("--done", a);
     r.setProperty("--brass", a);
     r.setProperty("--brassDim", shade(a, 0.62));
     r.setProperty("--onAccent", readable(a));
   }
-  if (st.pop) r.setProperty("--pop", fitContrast(st.pop, t.panel));
+  if (st.pop && !t.fixed) r.setProperty("--pop", fitContrast(st.pop, t.panel));
+  document.documentElement.classList.toggle("fx", !!t.fixed);
+  document.documentElement.classList.toggle("fxl", !!t.fixed && lumOf(t.ink) > 0.4);
+  if (t.fixed) document.documentElement.setAttribute("data-pal", st.theme);
+  else document.documentElement.removeAttribute("data-pal");
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute("content", t.ink);
 }

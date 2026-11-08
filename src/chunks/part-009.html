@@ -383,6 +383,8 @@ function dockTouch(d) {
     const x = e.touches[0].clientX;
     if (Math.abs(x - startX) > 6) moved = true;
     const n = near(x);
+    /* while dragging, labels switch to a style that reads on the lens and off it */
+    if (moved) d.classList.add("dragging");
     const px = Math.max(0, Math.min(n.r.width - 12 - n.w, x - n.r.left - 6 - n.w / 2));
     lens.style.transform = "translateX(" + px + "px)";
     /* magnify what the lens hovers */
@@ -393,9 +395,13 @@ function dockTouch(d) {
       b.querySelector("i").style.transform = "scale(" + (1 + 0.26 * t) + ") translateY(" + -3 * t + "px)";
     });
   }, { passive: true });
+  function undrag() {
+    d.classList.remove("dragging");
+  }
   d.addEventListener("touchend", function (e) {
     if (!dragging) return;
     dragging = false;
+    undrag();
     lens.style.transition = "";
     const x = (e.changedTouches[0] || {}).clientX || startX;
     const n = near(x);
@@ -412,12 +418,14 @@ function dockTouch(d) {
   d.addEventListener("touchcancel", function () {
     if (!dragging) return;
     dragging = false;
+    undrag();
     lens.style.transition = "";
     dockSync(true);
   });
   /* belt and braces: whatever happened while away, come back settled */
   function settle() {
     dragging = false;
+    undrag();
     lens.style.transition = "";
     if (!d.classList.contains("hide")) dockSync(true);
   }

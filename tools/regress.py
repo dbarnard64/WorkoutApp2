@@ -150,6 +150,10 @@ def swipe_checks(browser, url, c):
     ctx.close()
 
 
+def contrast_ok(pg, a, b):
+    return pg.evaluate("contrastOf('%s', '%s')" % (a, b)) >= 4.5
+
+
 def library_and_theme_checks(browser, url, c):
     ctx, pg, errs = fresh(browser, url)
     c.ok(css(pg, "--brass") == "#F0B43C" and css(pg, "--ink") == "#0A0A0A", "Ember on black by default")
@@ -162,11 +166,18 @@ def library_and_theme_checks(browser, url, c):
     pg.click(".pmenu [data-act=edit-prog]"); pg.wait_for_timeout(250)
     c.ok(pg.locator("textarea").count() > 0, "program menu Edit opens the editor")
     keys = pg.evaluate("Object.keys(THEMES)")
-    c.ok(len(keys) == 10, "ten themes")
+    fixed = pg.evaluate("Object.keys(THEMES).filter(function (k) { return THEMES[k].fixed; })")
+    c.ok(len(keys) == 24 and len(fixed) == 12, "twelve themes plus twelve fixed palettes")
     for k in keys:
         pg.evaluate("setSetting({theme:'%s', accent:null, pop:null}); applyTheme()" % k)
         light = k in ("marshmallow", "daylight")
-        c.ok(css(pg, "--ink") == ("#FFFFFF" if light else "#0A0A0A"), "%s background" % k)
+        if k in fixed:
+            c.ok(css(pg, "--ink") == pg.evaluate("THEMES['%s'].ink" % k).upper(), "%s palette background" % k)
+            for fg in ("--chalk", "--mute", "--faint", "--brass", "--pop"):
+                r = pg.evaluate("contrastOf(getComputedStyle(document.documentElement).getPropertyValue('%s').trim(), THEMES['%s'].ink)" % (fg, k))
+                c.ok(r >= 4.5, "%s %s on background %.2f" % (k, fg, r))
+        else:
+            c.ok(css(pg, "--ink") == ("#FFFFFF" if light else "#0A0A0A"), "%s background" % k)
         for fg in ("--chalk", "--mute", "--faint", "--brass", "--pop"):
             r = pg.evaluate("contrastOf(getComputedStyle(document.documentElement).getPropertyValue('%s').trim(), THEMES['%s'].panel)" % (fg, k))
             c.ok(r >= 4.5, "%s %s contrast %.2f" % (k, fg, r))
@@ -174,6 +185,18 @@ def library_and_theme_checks(browser, url, c):
     a = pg.evaluate("contrastOf(getComputedStyle(document.documentElement).getPropertyValue('--brass').trim(), THEMES.ember.panel)")
     p = pg.evaluate("contrastOf(getComputedStyle(document.documentElement).getPropertyValue('--pop').trim(), THEMES.ember.panel)")
     c.ok(a >= 4.5 and p >= 4.5, "unreadable custom colours are nudged readable")
+    pg.goto(url, wait_until="load"); pg.wait_for_timeout(900)
+    for k in fixed:
+        pg.evaluate("setSetting({theme:'%s', accent:null, pop:null}); applyTheme(); render()" % k)
+        on = pg.evaluate("document.documentElement.classList.contains('fx')")
+        hit = pg.evaluate("contrastOf(THEMES['%s'].onHit, THEMES['%s'].hit)" % (k, k))
+        c.ok(on and hit >= 4.4, "%s palette mode on, pop fills readable (%.2f)" % (k, hit))
+    pg.evaluate("setSetting({theme:'ember'}); applyTheme(); render()")
+    c.ok(not pg.evaluate("document.documentElement.classList.contains('fx')"), "normal themes stay out of poster mode")
+    pg.evaluate("setSetting({theme:'p_silent', accent:'#E0524A', pop:'#22FF22'}); applyTheme(); render()")
+    c.ok(css(pg, "--brass") == pg.evaluate("THEMES.p_silent.brass").upper() and css(pg, "--pop") == pg.evaluate("THEMES.p_silent.pop").upper(), "fixed palette ignores custom accent and pop")
+    pg.evaluate("setSetting({theme:'midnight'}); applyTheme()")
+    c.ok(css(pg, "--brass") != "#5B8CFF", "custom accent comes back on a normal theme")
     pg.evaluate("setSetting({accent:null, pop:null}); applyTheme()")
     c.ok(pg.evaluate("[plu(1,'set'),plu(2,'set'),plu(1,'day')].join('|')") == "1 set|2 sets|1 day", "count wording helper")
     c.ok(errs == [], "no page errors in Programs/Style")

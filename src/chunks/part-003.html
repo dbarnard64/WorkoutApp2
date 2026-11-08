@@ -24,7 +24,7 @@
 .dash{height:52px;border:1px dashed var(--line);border-radius:16px;color:var(--brass);
   font-family:var(--display);font-size:16px;letter-spacing:.06em;text-transform:uppercase;
   display:flex;align-items:center;justify-content:center;gap:8px;width:100%}
-.datefld{min-width:0;max-width:160px;height:34px;padding:0 8px;border-radius:8px;background:var(--panel2);border:1px solid var(--line);
+.datefld{flex-shrink:0;min-width:140px;max-width:170px;height:34px;padding:0 8px;border-radius:8px;background:var(--panel2);border:1px solid var(--line);
   color:var(--chalk);font-size:13px;color-scheme:dark}
 .iconbtn{color:var(--mute);width:44px;height:44px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .libtop{position:sticky;top:0;z-index:5;background:var(--ink);margin:-20px -20px 0;
@@ -315,6 +315,9 @@ input[type=color]{width:46px;height:34px;border:1px solid var(--line);border-rad
 .swatches{grid-template-columns:repeat(3, minmax(0, 1fr));gap:8px}
 .sw{border:0;border-radius:18px;background:var(--panel);padding:12px}
 .sw.on{box-shadow:inset 0 0 0 1.5px var(--brass)}
+.sw.fx{box-shadow:inset 0 0 0 1px rgba(128,128,128,.28)}
+.sw.fx.on{box-shadow:inset 0 0 0 2px var(--brass)}
+.palnote{color:var(--mute);font-size:13px;line-height:1.5;margin:6px 0 0}
 .sw b{font-family:var(--body);font-weight:600;font-size:13px;text-transform:none}
 .sw .dots i{width:22px;height:22px}
 .sw .dots i:not(:nth-child(3)){display:none}
