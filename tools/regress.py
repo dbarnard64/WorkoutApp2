@@ -197,6 +197,13 @@ def library_and_theme_checks(browser, url, c):
     c.ok(css(pg, "--brass") == pg.evaluate("THEMES.p_silent.brass").upper() and css(pg, "--pop") == pg.evaluate("THEMES.p_silent.pop").upper(), "fixed palette ignores custom accent and pop")
     pg.evaluate("setSetting({theme:'midnight'}); applyTheme()")
     c.ok(css(pg, "--brass") != "#5B8CFF", "custom accent comes back on a normal theme")
+    pg.goto(url, wait_until="load"); pg.wait_for_timeout(900)
+    pg.evaluate("pagerOpen(); pagerMove(1.5)")
+    c.ok(pg.evaluate("document.querySelectorAll('.pager .pane').length === 3 && document.getElementById('app').classList.contains('paging')"),
+         "dock drag shows all three pages side by side")
+    pg.evaluate("pagerClose()")
+    c.ok(pg.evaluate("!document.querySelector('.pager') && !document.getElementById('app').classList.contains('paging')"),
+         "pager cleans up and the live page returns")
     pg.evaluate("setSetting({accent:null, pop:null}); applyTheme()")
     c.ok(pg.evaluate("[plu(1,'set'),plu(2,'set'),plu(1,'day')].join('|')") == "1 set|2 sets|1 day", "count wording helper")
     c.ok(errs == [], "no page errors in Programs/Style")

@@ -363,6 +363,61 @@ function dockLensTo(d, i) {
   lens.style.transform = "translateX(" + i * w + "px)";
 }
 
+/* ===== pager: while the dock lens is dragged, the pages slide with it =====
+   Snapshots of all three tabs sit side by side; the live page hides
+   underneath until the finger lifts, then the real tab renders. */
+let PAGER = null;
+function pagerSnap(t) {
+  if (t === S.tab) return document.getElementById("app").innerHTML;
+  const keep = { tab: S.tab, page: S.page, sheet: S.sheet };
+  let html = "";
+  try {
+    S.tab = t; S.page = null; S.sheet = null;
+    const dp = parsedProgram();
+    if (t === "train") html = dp && dp.days.length ? vHeader() + vTrain(dp) : "";
+    else if (t === "profile") html = vTabHead("Profile") + vProfile();
+    else html = vTabHead("Programs") + vLibrary();
+  } finally {
+    S.tab = keep.tab; S.page = keep.page; S.sheet = keep.sheet;
+  }
+  return html;
+}
+function pagerOpen() {
+  if (PAGER || S.sheet || S.editing) return;
+  const app = document.getElementById("app");
+  const pg = document.createElement("div");
+  pg.className = "pager";
+  pg.setAttribute("aria-hidden", "true");
+  const track = document.createElement("div");
+  track.className = "track";
+  const y = window.scrollY;
+  DOCK_TABS.forEach(function (x) {
+    const pane = document.createElement("div");
+    pane.className = "pane";
+    const inner = document.createElement("div");
+    inner.innerHTML = pagerSnap(x[0]);
+    pane.appendChild(inner);
+    track.appendChild(pane);
+  });
+  pg.appendChild(track);
+  document.body.appendChild(pg);
+  const vh = window.innerHeight;
+  track.querySelectorAll(".pane > div").forEach(function (inner) {
+    inner.style.transform = "translateY(" + -Math.min(y, Math.max(0, inner.scrollHeight - vh)) + "px)";
+  });
+  app.classList.add("paging");
+  PAGER = { el: pg, track: track };
+}
+function pagerMove(p) { /* p: 0 .. tabs-1, fractional while dragging */
+  if (PAGER) PAGER.track.style.transform = "translateX(" + -p * (100 / DOCK_TABS.length) + "%)";
+}
+function pagerClose() {
+  if (!PAGER) return;
+  PAGER.el.remove();
+  PAGER = null;
+  document.getElementById("app").classList.remove("paging");
+}
+
 function dockTouch(d) {
   let dragging = false, moved = false, startX = 0;
   const lens = d.querySelector(".lens");
@@ -384,9 +439,10 @@ function dockTouch(d) {
     if (Math.abs(x - startX) > 6) moved = true;
     const n = near(x);
     /* while dragging, labels switch to a style that reads on the lens and off it */
-    if (moved) d.classList.add("dragging");
+    if (moved) { d.classList.add("dragging"); pagerOpen(); }
     const px = Math.max(0, Math.min(n.r.width - 12 - n.w, x - n.r.left - 6 - n.w / 2));
     lens.style.transform = "translateX(" + px + "px)";
+    pagerMove(px / n.w);
     /* magnify what the lens hovers */
     d.querySelectorAll("button").forEach(function (b) {
       const br = b.getBoundingClientRect();
@@ -407,7 +463,20 @@ function dockTouch(d) {
     const n = near(x);
     if (moved) {
       const btn = d.querySelectorAll("button")[n.i];
-      btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      const go = function () {
+        btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        pagerClose();
+      };
+      if (PAGER) {
+        /* finish the slide to the chosen page, then swap in the live one */
+        const tr = PAGER.track;
+        tr.style.transition = "transform .28s cubic-bezier(.22,1,.36,1)";
+        pagerMove(n.i);
+        let done = false;
+        const fin = function () { if (!done) { done = true; go(); } };
+        tr.addEventListener("transitionend", fin, { once: true });
+        setTimeout(fin, 340);
+      } else go();
     } else {
       dockSync(true); /* plain tap: let the native click land, just settle the lens */
     }
@@ -419,6 +488,7 @@ function dockTouch(d) {
     if (!dragging) return;
     dragging = false;
     undrag();
+    pagerClose();
     lens.style.transition = "";
     dockSync(true);
   });
@@ -426,6 +496,7 @@ function dockTouch(d) {
   function settle() {
     dragging = false;
     undrag();
+    pagerClose();
     lens.style.transition = "";
     if (!d.classList.contains("hide")) dockSync(true);
   }
