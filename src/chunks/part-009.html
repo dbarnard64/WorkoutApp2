@@ -80,7 +80,8 @@ function vCalendar() {
             '</div><svg class="hchev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg></button>'
           );
         }).join("")
-      : '<p style="color:var(--faint);font-size:13px;margin:10px 0 0">Rest day &mdash; nothing logged.</p>') +
+      : '<p style="color:var(--faint);font-size:13px;margin:10px 0 0">' +
+        (selD === ymd(now) ? "Nothing logged yet &mdash; a session lands here once you finish the workout." : "Nothing logged.") + "</p>") +
     "</div>";
   return (
     '<div class="wrap pad calpage">' +
@@ -367,6 +368,8 @@ function dockLensTo(d, i) {
    Snapshots of all three tabs sit side by side; the live page hides
    underneath until the finger lifts, then the real tab renders. */
 let PAGER = null;
+const TAB_SCROLL = {};
+let pendingScroll = null;
 function pagerSnap(t) {
   if (t === S.tab) return document.getElementById("app").innerHTML;
   const keep = { tab: S.tab, page: S.page, sheet: S.sheet };
@@ -395,6 +398,7 @@ function pagerOpen() {
     const pane = document.createElement("div");
     pane.className = "pane";
     const inner = document.createElement("div");
+    inner.dataset.y = x[0] === S.tab ? y : TAB_SCROLL[x[0]] || 0;
     inner.innerHTML = pagerSnap(x[0]);
     pane.appendChild(inner);
     track.appendChild(pane);
@@ -403,7 +407,7 @@ function pagerOpen() {
   document.body.appendChild(pg);
   const vh = window.innerHeight;
   track.querySelectorAll(".pane > div").forEach(function (inner) {
-    inner.style.transform = "translateY(" + -Math.min(y, Math.max(0, inner.scrollHeight - vh)) + "px)";
+    inner.style.transform = "translateY(" + -Math.min(+inner.dataset.y, Math.max(0, inner.scrollHeight - vh)) + "px)";
   });
   app.classList.add("paging");
   PAGER = { el: pg, track: track };

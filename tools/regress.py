@@ -167,7 +167,7 @@ def library_and_theme_checks(browser, url, c):
     c.ok(pg.locator("textarea").count() > 0, "program menu Edit opens the editor")
     keys = pg.evaluate("Object.keys(THEMES)")
     fixed = pg.evaluate("Object.keys(THEMES).filter(function (k) { return THEMES[k].fixed; })")
-    c.ok(len(keys) == 24 and len(fixed) == 12, "twelve themes plus twelve fixed palettes")
+    c.ok(len(keys) == 25 and len(fixed) == 13, "twelve themes plus thirteen fixed palettes")
     for k in keys:
         pg.evaluate("setSetting({theme:'%s', accent:null, pop:null}); applyTheme()" % k)
         light = k in ("marshmallow", "daylight")
@@ -198,6 +198,45 @@ def library_and_theme_checks(browser, url, c):
     pg.evaluate("setSetting({theme:'midnight'}); applyTheme()")
     c.ok(css(pg, "--brass") != "#5B8CFF", "custom accent comes back on a normal theme")
     pg.goto(url, wait_until="load"); pg.wait_for_timeout(900)
+    flow = pg.evaluate("""(() => {
+      const d = currentDay(), wk = wkNow(), pid = activeProgram().id, di = currentDayIndex();
+      if (!S.log.weeks[wk]) S.log.weeks[wk] = {};
+      S.log.weeks[wk][pid + ':d' + di + 'a0'] = { n: 'Cable Fly', sets: 3, reps: '12' };
+      persist();
+      const names = () => dayFlow(d, false).map((f) => f.it.name || f.it.label || f.it.text);
+      const a = names();
+      moveFlow(d, a.length - 1, -1, false);
+      const b = names();
+      for (let i = b.indexOf('Cable Fly'); i > 0; i--) moveFlow(d, i, -1, false);
+      const c = names();
+      resetFlow(d);
+      const e = names();
+      delete S.log.weeks[wk][pid + ':d' + di + 'a0']; persist();
+      return [a[a.length - 1], b[b.length - 2], c[0], e[e.length - 1]];
+    })()""")
+    c.ok(flow == ["Cable Fly", "Cable Fly", "Cable Fly", "Cable Fly"], "an added exercise is in the reorder list, moves anywhere, and resets to the bottom %r" % flow)
+    rest = pg.evaluate("""(() => {
+      const calls = []; const real = window.tone; window.tone = function (f) { calls.push(f); };
+      startRest(60); S.rest.end = Date.now() + 2500; tickRest();
+      S.rest.end = Date.now() - 1; tickRest();
+      const flashed = !!document.getElementById('restflash');
+      window.tone = real; stopRest();
+      return [calls, flashed];
+    })()""")
+    c.ok(rest[0] == [560, 660, 990] and rest[1], "rest timer ticks near the end, chimes and flashes when it finishes %r" % (rest,))
+    pg.set_viewport_size({"width": 320, "height": 568})
+    pg.evaluate("S.tab='train'; render(); window.scrollTo(0, 900)"); pg.wait_for_timeout(100)
+    pg.locator('[data-act="tab"]').nth(0).click(); pg.wait_for_timeout(150)
+    lib = pg.evaluate("scrollY")
+    pg.evaluate("window.scrollTo(0, 120)"); pg.locator('[data-act="tab"]').nth(1).click(); pg.wait_for_timeout(150)
+    back = pg.evaluate("scrollY")
+    pg.locator('[data-act="tab"]').nth(0).click(); pg.wait_for_timeout(150)
+    again = pg.evaluate("scrollY")
+    pg.locator('[data-act="tab"]').nth(0).click(); pg.wait_for_timeout(150)
+    top = pg.evaluate("scrollY")
+    c.ok(lib == 0 and back > 500 and again == 120 and top == 0,
+         "each tab keeps its own scroll; tapping the current tab goes to the top %r" % ([lib, back, again, top],))
+    pg.set_viewport_size({"width": 390, "height": 844})
     pg.evaluate("pagerOpen(); pagerMove(1.5)")
     c.ok(pg.evaluate("document.querySelectorAll('.pager .pane').length === 3 && document.getElementById('app').classList.contains('paging')"),
          "dock drag shows all three pages side by side")

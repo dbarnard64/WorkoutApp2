@@ -313,7 +313,8 @@ function renderInner() {
   const os = document.getElementById("offline-state");
   if (os) os.textContent = offlineState;
   paintTimer();
-  window.scrollTo(0, y);
+  window.scrollTo(0, pendingScroll != null ? pendingScroll : y);
+  pendingScroll = null;
 }
 
 function vSheet() {
@@ -417,6 +418,10 @@ const THEMES = {
     chalk: "#FFFFFF", mute: "#F3D8E1", faint: "#F3D7E0", brass: "#FFD5E2", brassDim: "#DE7396",
     onAccent: "#141414", rest: "#5E8C6A", done: "#FFD5E2", pop: "#FFE164",
     main: "#FFD0DF", hit: "#FFE164", onHit: "#141414", fixed: true },
+  p_glass: { name: "Liquid Glass", ink: "#0B1026", panel: "#1A2142", panel2: "#232B52", line: "#3A4470",
+    chalk: "#FFFFFF", mute: "#C9D2EE", faint: "#9AA6CC", brass: "#E6F0FF", brassDim: "#78809A",
+    onAccent: "#0B1026", rest: "#5E8C6A", done: "#E6F0FF", pop: "#64D2FF",
+    main: "#E6F0FF", hit: "#64D2FF", onHit: "#0B1026", fixed: true },
 };
 
 /* a green or teal accent would be hard to tell apart from the sage "done" colour */
@@ -493,6 +498,7 @@ function applyTheme() {
   if (st.pop && !t.fixed) r.setProperty("--pop", fitContrast(st.pop, t.panel));
   document.documentElement.classList.toggle("fx", !!t.fixed);
   document.documentElement.classList.toggle("fxl", !!t.fixed && lumOf(t.ink) > 0.4);
+  document.documentElement.classList.toggle("lt", lumOf(t.ink) > 0.4); /* any light theme */
   if (t.fixed) document.documentElement.setAttribute("data-pal", st.theme);
   else document.documentElement.removeAttribute("data-pal");
   const meta = document.querySelector('meta[name="theme-color"]');

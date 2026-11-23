@@ -707,8 +707,10 @@ function setStart(id, v) {
 /* ===== rest timer ===== */
 let restInt = null;
 let rang = false;
+let lastTick = null;
 function startRest(sec) {
   rang = false;
+  lastTick = null;
   S.rest = { end: Date.now() + sec * 1000, dur: sec };
   clearInterval(restInt);
   restInt = setInterval(tickRest, 250);
@@ -725,11 +727,25 @@ function stopRest() {
 function restLeft() {
   return S.rest ? Math.max(0, Math.ceil((S.rest.end - Date.now()) / 1000)) : 0;
 }
+function restFlash() {
+  const old = document.getElementById("restflash");
+  if (old) old.remove();
+  const el = document.createElement("div");
+  el.id = "restflash";
+  el.className = "restflash";
+  document.body.appendChild(el);
+  setTimeout(function () { el.remove(); }, 2200);
+}
 function tickRest() {
   const left = restLeft();
+  if (left > 0 && left <= 3 && left !== lastTick) {
+    lastTick = left;
+    tick();
+  }
   if (left === 0 && !rang) {
     rang = true;
     beep();
+    restFlash();
     if (navigator.vibrate) try { navigator.vibrate([120, 80, 120]); } catch (e) {}
     clearInterval(restInt);
     restInt = null;

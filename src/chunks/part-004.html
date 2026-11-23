@@ -304,25 +304,29 @@ html .dock.dragging button,html.fx .dock.dragging button,html .dock.dragging but
   text-shadow:0 0 2px var(--ink), 0 0 6px var(--ink), 0 0 10px var(--ink)}
 html .dock.dragging button svg{filter:drop-shadow(0 0 2px var(--ink)) drop-shadow(0 0 5px var(--ink))}
 
-/* ===== raised buttons ===== flat-topped shapes only; set discs stay flat and just press in */
+/* ===== buttons: fade up =====
+   What's selected (the day, the dock tab) glows up from a thin line on its
+   bottom edge and fades out towards the top; action buttons are solid at the
+   bottom, softening upwards. Flat, no shadows. */
 .dock .lens,.btn-primary:not([disabled]),.btn-amber,.pill.on{--rc:var(--brass)}
 html.fx .dock .lens,html.fx .btn-primary:not([disabled]),html.fx .btn-amber,html.fx .pill.on{--rc:var(--hit)}
-.dock .lens,.btn-primary:not([disabled]),.btn-amber,.pill.on{
-  background:linear-gradient(180deg, color-mix(in srgb, var(--rc), #fff 16%) 0%, var(--rc) 55%, color-mix(in srgb, var(--rc), #000 10%) 100%)!important;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.5), inset 0 -2px 0 rgba(0,0,0,.2), 0 1px 2px rgba(0,0,0,.4), 0 8px 18px -6px color-mix(in srgb, var(--rc) 70%, transparent)!important;
-  }
-.btn-primary:not([disabled]),.btn-amber,.pill.on{transition:transform .08s ease, box-shadow .08s ease}
-.btn-primary:not([disabled]):active,.btn-amber:active,.pill.on:active{transform:translateY(1px);background:var(--rc)!important;
-  box-shadow:inset 0 2px 5px rgba(0,0,0,.35), inset 0 0 0 1px rgba(0,0,0,.08)!important}
-.disc{transition:transform .12s cubic-bezier(.3,1.6,.5,1), filter .12s ease, box-shadow .12s ease}
-.disc:active{transform:scale(.8);filter:brightness(.82);box-shadow:inset 0 3px 6px rgba(0,0,0,.4)!important;transition-duration:.05s}
+.pill.on,.dock .lens{background:linear-gradient(0deg, color-mix(in srgb, var(--rc) 55%, transparent) 0%, color-mix(in srgb, var(--rc) 16%, transparent) 45%, color-mix(in srgb, var(--rc) 6%, transparent) 70%, color-mix(in srgb, var(--rc) 6%, transparent) 100%)!important;
+  box-shadow:inset 0 -2px 0 var(--rc), inset 0 0 0 1px color-mix(in srgb, var(--rc) 35%, transparent)!important;border-color:transparent!important;background-origin:border-box!important;background-repeat:no-repeat!important}
+.pill.on,.pill.on *{color:var(--chalk)!important}
+.dock button.on,html.fx .dock button.on{color:var(--chalk)}
+/* every coloured button gets the same fade as the dock tab and Finish */
+.btn-primary:not([disabled]),.btn-amber{background:linear-gradient(0deg, color-mix(in srgb, var(--rc) 55%, transparent) 0%, color-mix(in srgb, var(--rc) 16%, transparent) 45%, color-mix(in srgb, var(--rc) 6%, transparent) 70%, color-mix(in srgb, var(--rc) 6%, transparent) 100%)!important;
+  box-shadow:inset 0 -2px 0 var(--rc), inset 0 0 0 1px color-mix(in srgb, var(--rc) 35%, transparent)!important;border-color:transparent!important;
+  background-origin:border-box!important;background-repeat:no-repeat!important;color:var(--chalk)!important}
+.btn-primary:not([disabled]),.btn-amber,.pill.on{transition:transform .1s ease, filter .1s ease}
+.btn-primary:not([disabled]):active,.btn-amber:active,.pill.on:active{transform:scale(.96);filter:brightness(.9)}
+.disc{transition:transform .12s cubic-bezier(.3,1.6,.5,1), filter .12s ease}
+.disc:active{transform:scale(.86);filter:brightness(.85);transition-duration:.05s}
 
 /* dock press: the tab you touch sinks before the page changes */
 .dock:not(.dragging) button:active i{transform:scale(.88)!important;transition-duration:.05s}
 .dock:not(.dragging) button:not(.on):active::before{content:"";position:absolute;inset:6px 4px;border-radius:24px;z-index:-1;
-  background:color-mix(in srgb, var(--chalk) 8%, transparent);box-shadow:inset 0 2px 5px rgba(0,0,0,.35)}
-.dock:not(.dragging):has(button.on:active) .lens{background:var(--rc)!important;filter:brightness(.85);
-  box-shadow:inset 0 3px 7px rgba(0,0,0,.4), inset 0 0 0 1px rgba(0,0,0,.1)!important}
+  background:color-mix(in srgb, var(--chalk) 8%, transparent)}
 /* pager: the three pages side by side while the dock lens is dragged */
 .pager{position:fixed;inset:0;z-index:15;overflow:hidden;pointer-events:none}
 .pager .track{display:flex;width:300%;height:100%;will-change:transform}
@@ -331,6 +335,106 @@ html.fx .dock .lens,html.fx .btn-primary:not([disabled]),html.fx .btn-amber,html
 #app.paging{visibility:hidden}
 /* the week strip scrolls sideways, which clips anything outside it: give the raised day's glow room */
 html .strip{padding-bottom:20px;margin-bottom:-16px}
+/* rest over: the screen edge pulses in the pop colour and the timer bar breathes */
+.restflash{--fc:var(--pop);position:fixed;inset:0;z-index:30;pointer-events:none;border-radius:0;
+  box-shadow:inset 0 0 0 0 transparent;animation:restflash .7s ease-out 3}
+html.fx .restflash{--fc:var(--hit)}
+@keyframes restflash{0%{box-shadow:inset 0 0 0 0 transparent}
+  30%{box-shadow:inset 0 0 0 5px var(--fc), inset 0 0 60px color-mix(in srgb, var(--fc) 45%, transparent)}
+  100%{box-shadow:inset 0 0 0 0 transparent}}
+.timerbar.ding .in{animation:restbreathe 1.4s ease-in-out 3}
+@keyframes restbreathe{50%{transform:scale(1.03)}}
+@media (prefers-reduced-motion: reduce){.restflash{display:none}.timerbar.ding .in{animation:none}}
+/* small screens (iPhone SE size and below) */
+@media (max-width: 360px){
+  .detail > .row{flex-wrap:wrap;row-gap:8px!important}
+  .detail > .row > .tnum{min-width:0!important;flex:1 1 calc(100% - 110px)}
+  .detail > .row > .ghost{flex:1 1 35%!important}
+  .foot .btn-primary,.foot .btn-ghost{white-space:nowrap;padding-left:10px;padding-right:10px;font-size:14px}
+  .swatches{grid-template-columns:repeat(2, minmax(0, 1fr))}
+}
+.sw b{-webkit-hyphens:auto;hyphens:auto}
+/* the paste and build screens are work surfaces: no palette art behind them */
+html.fx[data-pal] body:has(.paste)::before,html.fx[data-pal] body:has(.paste)::after{display:none}
+/* Finish workout: the same fade-up as the other action buttons */
+.finish:not(.logged){--rc:var(--brass);color:var(--chalk);border-color:transparent;
+  background:linear-gradient(0deg, color-mix(in srgb, var(--rc) 55%, transparent) 0%, color-mix(in srgb, var(--rc) 16%, transparent) 45%, color-mix(in srgb, var(--rc) 6%, transparent) 70%, color-mix(in srgb, var(--rc) 6%, transparent) 100%) border-box no-repeat;
+  box-shadow:inset 0 -2px 0 var(--rc), inset 0 0 0 1px color-mix(in srgb, var(--rc) 35%, transparent);
+  transition:transform .1s ease, filter .1s ease}
+html.fx .finish:not(.logged){--rc:var(--hit)}
+.finish:not(.logged):active{transform:scale(.97);filter:brightness(.9)}
+/* the rest of the coloured buttons: selected segment, selected calendar day, ticked sets */
+.seg.on,.cald.sel,.disc.on{--rc:var(--brass)}
+html.fx .seg.on,html.fx .cald.sel,html.fx .disc.on{--rc:var(--hit)}
+.seg.on,.cald.sel,.disc.on{background:linear-gradient(0deg, color-mix(in srgb, var(--rc) 55%, transparent) 0%, color-mix(in srgb, var(--rc) 16%, transparent) 45%, color-mix(in srgb, var(--rc) 6%, transparent) 70%, color-mix(in srgb, var(--rc) 6%, transparent) 100%) border-box no-repeat!important;
+  box-shadow:inset 0 -2px 0 var(--rc), inset 0 0 0 1px color-mix(in srgb, var(--rc) 35%, transparent)!important;border-color:transparent!important;color:var(--chalk)!important}
+.disc.on svg,.cald.sel *{color:var(--chalk)!important;stroke:currentColor}
+/* light themes: the fade melts into the surface the button sits on, with the
+   colour kept to the bottom third so opposite colours (blue on pink) stay clean */
+html.lt .pill.on,html.lt .dock .lens,html.lt .btn-primary:not([disabled]),html.lt .btn-amber,html.lt .finish:not(.logged),
+html.lt .seg.on,html.lt .cald.sel,html.lt .disc.on{--bgx:var(--panel);
+  background:linear-gradient(0deg, color-mix(in srgb, var(--rc) 70%, var(--bgx)) 0%, color-mix(in srgb, var(--rc) 22%, var(--bgx)) 32%, color-mix(in srgb, var(--rc) 6%, var(--bgx)) 55%, var(--bgx) 100%) border-box no-repeat!important}
+/* the selected day sits straight on the page, where any longer fade clashes
+   (blue into pink goes purple): a short glow rising from a bottom line,
+   with the date in the accent colour */
+html.lt .pill.on,html.lt .cald.sel{--tx2:var(--brass);
+  background:linear-gradient(0deg, color-mix(in srgb, var(--rc) 30%, var(--panel)) 0%, var(--panel) 38%) border-box no-repeat!important;
+  box-shadow:inset 0 -3px 0 var(--rc)!important}
+html.fx.lt .pill.on,html.fx.lt .cald.sel{--tx2:var(--pop)}
+html.lt .pill.on .pnum,html.lt .cald.sel,html.lt .cald.sel *{color:var(--tx2)!important}
+
+/* ===== Liquid Glass ===== a vivid wallpaper behind everything, and every surface is a
+   pane of frosted glass over it: blur, extra saturation, a bright specular top edge,
+   a thin light rim, and a soft shadow. Selected and action controls are tinted glass. */
+html.fx[data-pal="p_glass"]{--panel:rgba(255,255,255,.075)!important;--panel2:rgba(255,255,255,.10)!important;--line:rgba(255,255,255,.16)!important;background:#0B1026}
+html.fx[data-pal="p_glass"] body::before{display:block;position:fixed;inset:0;height:auto;z-index:-1;opacity:1;filter:saturate(115%);-webkit-mask:none;mask:none;
+  background:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20400%20860%22%20preserveAspectRatio%3D%22xMidYMid%20slice%22%3E%0A%3Cdefs%3E%0A%3ClinearGradient%20id%3D%22a%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%235B3BFF%22/%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%231E2BFF%22/%3E%3C/linearGradient%3E%0A%3ClinearGradient%20id%3D%22b%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%220%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23FF3D9A%22/%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23FF8A3D%22/%3E%3C/linearGradient%3E%0A%3ClinearGradient%20id%3D%22c%22%20x1%3D%220%22%20y1%3D%221%22%20x2%3D%221%22%20y2%3D%220%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%2300C2A8%22/%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%232B9BFF%22/%3E%3C/linearGradient%3E%0A%3ClinearGradient%20id%3D%22d%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23B23BFF%22/%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%235B3BFF%22/%3E%3C/linearGradient%3E%0A%3CradialGradient%20id%3D%22sh%22%20cx%3D%22.5%22%20cy%3D%22.5%22%20r%3D%22.6%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23fff%22%20stop-opacity%3D%22.22%22/%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23fff%22%20stop-opacity%3D%220%22/%3E%3C/radialGradient%3E%0A%3C/defs%3E%0A%3Crect%20width%3D%22400%22%20height%3D%22860%22%20fill%3D%22%23090C22%22/%3E%0A%3Cpath%20d%3D%22M-40%20120%20C%2080%2040%20200%20220%20330%20120%20S%20470%2060%20470%2060%20L%20470%20-40%20L%20-40%20-40%20Z%22%20fill%3D%22url%28%23a%29%22/%3E%0A%3Cpath%20d%3D%22M-40%20330%20C%2060%20230%20170%20400%20290%20300%20S%20440%20220%20460%20260%20L%20460%20520%20C%20330%20600%20160%20430%20-40%20520%20Z%22%20fill%3D%22url%28%23b%29%22%20opacity%3D%22.92%22/%3E%0A%3Cpath%20d%3D%22M-40%20560%20C%2090%20470%20220%20640%20360%20540%20S%20470%20500%20470%20500%20L%20470%20760%20C%20300%20820%20140%20680%20-40%20760%20Z%22%20fill%3D%22url%28%23c%29%22%20opacity%3D%22.95%22/%3E%0A%3Cpath%20d%3D%22M-40%20780%20C%20120%20700%20240%20860%20470%20760%20L%20470%20900%20L%20-40%20900%20Z%22%20fill%3D%22url%28%23d%29%22/%3E%0A%3Cpath%20d%3D%22M-40%20120%20C%2080%2040%20200%20220%20330%20120%20S%20470%2060%20470%2060%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-opacity%3D%22.35%22%20stroke-width%3D%221.5%22/%3E%0A%3Cpath%20d%3D%22M-40%20520%20C%20160%20430%20330%20600%20460%20520%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-opacity%3D%22.3%22%20stroke-width%3D%221.5%22/%3E%0A%3Cpath%20d%3D%22M-40%20760%20C%20140%20680%20300%20820%20470%20760%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-opacity%3D%22.3%22%20stroke-width%3D%221.5%22/%3E%0A%3Cellipse%20cx%3D%22300%22%20cy%3D%22200%22%20rx%3D%22160%22%20ry%3D%22120%22%20fill%3D%22url%28%23sh%29%22/%3E%0A%3C/svg%3E") center/cover no-repeat,#090C22}
+html.fx[data-pal="p_glass"] body::after{display:none}
+html.fx[data-pal="p_glass"] .dayhead,
+html.fx[data-pal="p_glass"] .card,
+html.fx[data-pal="p_glass"] .pill:not(.on),
+html.fx[data-pal="p_glass"] .hdr .chip,
+html.fx[data-pal="p_glass"] .block,
+html.fx[data-pal="p_glass"] .sheet,
+html.fx[data-pal="p_glass"] .calnav,
+html.fx[data-pal="p_glass"] .cald:not(.sel),
+html.fx[data-pal="p_glass"] .copylast,
+html.fx[data-pal="p_glass"] .list .dash,
+html.fx[data-pal="p_glass"] .removed,
+html.fx[data-pal="p_glass"] .pbsearch,
+html.fx[data-pal="p_glass"] .sw,
+html.fx[data-pal="p_glass"] .rev .chip,
+html.fx[data-pal="p_glass"] .tbar .tcol,
+html.fx[data-pal="p_glass"] .pblist > .pbrow,
+html.fx[data-pal="p_glass"] .catgrp{-webkit-backdrop-filter:blur(22px) saturate(180%);backdrop-filter:blur(22px) saturate(180%);
+  background-image:linear-gradient(180deg, rgba(255,255,255,.13) 0%, rgba(255,255,255,.03) 38%, rgba(255,255,255,0) 60%)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.32), inset 0 -1px 0 rgba(255,255,255,.06), inset 0 0 0 1px rgba(255,255,255,.12), 0 12px 32px -14px rgba(0,0,0,.55)!important;border-color:transparent!important}
+html.fx[data-pal="p_glass"] .sheet{background-color:rgba(20,24,52,.55)!important}
+html.fx[data-pal="p_glass"] .dock{background:rgba(255,255,255,.08)!important;-webkit-backdrop-filter:blur(26px) saturate(190%);backdrop-filter:blur(26px) saturate(190%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.35), inset 0 0 0 1px rgba(255,255,255,.14), 0 18px 40px -12px rgba(0,0,0,.6)!important;border-color:transparent!important}
+html.fx[data-pal="p_glass"] .pill.on,
+html.fx[data-pal="p_glass"] .dock .lens,
+html.fx[data-pal="p_glass"] .btn-primary:not([disabled]),
+html.fx[data-pal="p_glass"] .btn-amber,
+html.fx[data-pal="p_glass"] .finish:not(.logged),
+html.fx[data-pal="p_glass"] .seg.on,
+html.fx[data-pal="p_glass"] .cald.sel,
+html.fx[data-pal="p_glass"] .disc.on{color:#fff!important;border-color:transparent!important;-webkit-backdrop-filter:blur(18px) saturate(210%) brightness(1.08);backdrop-filter:blur(18px) saturate(210%) brightness(1.08);
+  /* the same fade-up as every other theme, done in glass: colour rises from a bright
+     bottom line through clear glass, with a specular edge along the top */
+  background:linear-gradient(0deg, color-mix(in srgb, var(--hit) 62%, transparent) 0%, color-mix(in srgb, var(--hit) 22%, transparent) 42%, rgba(255,255,255,.06) 72%, rgba(255,255,255,.10) 100%) border-box no-repeat!important;
+  box-shadow:inset 0 -2px 0 var(--hit), inset 0 1px 0 rgba(255,255,255,.55), inset 0 0 0 1px rgba(255,255,255,.20), 0 10px 26px -12px color-mix(in srgb, var(--hit) 75%, transparent)!important}
+html.fx[data-pal="p_glass"] .pill.on *,html.fx[data-pal="p_glass"] .dock button.on,html.fx[data-pal="p_glass"] .cald.sel *{color:#fff!important}
+html.fx[data-pal="p_glass"] .card:has(.detail){border:0!important}
+html.fx[data-pal="p_glass"] .tdy,html.fx[data-pal="p_glass"] .badge.pb{background:rgba(255,255,255,.22);color:#fff;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);box-shadow:inset 0 1px 0 rgba(255,255,255,.5)}
+html.fx[data-pal="p_glass"] .libtop{background:transparent!important;-webkit-backdrop-filter:blur(20px) saturate(170%);backdrop-filter:blur(20px) saturate(170%);box-shadow:none!important}
+/* glass over a bright wallpaper: content panes carry a faint dark tint so white text stays readable */
+html.fx[data-pal="p_glass"] .dayhead,html.fx[data-pal="p_glass"] .card,html.fx[data-pal="p_glass"] .block,html.fx[data-pal="p_glass"] .removed,html.fx[data-pal="p_glass"] .list .dash,html.fx[data-pal="p_glass"] .copylast{background-color:rgba(10,14,42,.34)!important}
+html.fx[data-pal="p_glass"] .tile,html.fx[data-pal="p_glass"] .bkline{background-color:rgba(10,14,42,.34)!important;-webkit-backdrop-filter:blur(22px) saturate(180%);backdrop-filter:blur(22px) saturate(180%);
+  background-image:linear-gradient(180deg, rgba(255,255,255,.13) 0%, rgba(255,255,255,.03) 38%, rgba(255,255,255,0) 60%)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.32), inset 0 0 0 1px rgba(255,255,255,.12), 0 12px 32px -14px rgba(0,0,0,.55)!important;border-color:transparent!important}
+/* text sitting straight on the wallpaper gets a soft shadow so it reads over bright waves */
+html.fx[data-pal="p_glass"] #app{text-shadow:0 1px 3px rgba(0,0,0,.35)}
 </style>
 </head>
 <body>

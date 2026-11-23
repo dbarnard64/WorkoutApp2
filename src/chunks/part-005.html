@@ -405,24 +405,55 @@ const todayName = () =>
     new Date().getDay()
   ];
 
+/* iPhone only lets a page make sound from an AudioContext that was started
+   by a tap. The rest timer ends on its own, long after the tap, so one shared
+   context is unlocked on the first touch and reused for every sound. */
+let audioCtx = null;
+function audio() {
+  if (!audioCtx) {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    audioCtx = new Ctx();
+  }
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  return audioCtx;
+}
+function unlockAudio() {
+  try {
+    const ctx = audio();
+    if (!ctx) return;
+    const b = ctx.createBuffer(1, 1, 22050), s = ctx.createBufferSource();
+    s.buffer = b;
+    s.connect(ctx.destination);
+    s.start(0);
+  } catch (e) { /* silent */ }
+}
+["touchend", "pointerdown", "keydown"].forEach(function (t) {
+  document.addEventListener(t, unlockAudio, { passive: true, capture: true });
+});
+function tone(freq, at, len, vol) {
+  const ctx = audio();
+  if (!ctx) return;
+  const o = ctx.createOscillator(), g = ctx.createGain(), t0 = ctx.currentTime + at;
+  o.connect(g);
+  g.connect(ctx.destination);
+  o.type = "triangle";
+  o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(vol, t0 + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + len);
+  o.start(t0);
+  o.stop(t0 + len + 0.05);
+}
+/* the last three seconds tick softly; the end is a rising two-note chime */
+function tick() {
+  try { tone(560, 0, 0.08, 0.12); } catch (e) { /* silent */ }
+}
 function beep() {
   try {
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    const ctx = new Ctx();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.connect(g);
-    g.connect(ctx.destination);
-    o.type = "triangle";
-    o.frequency.value = 760;
-    g.gain.setValueAtTime(0.0001, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.7);
-    o.start();
-    o.stop(ctx.currentTime + 0.75);
-  } catch (e) {
-    /* silent */
-  }
+    tone(660, 0, 0.32, 0.28);
+    tone(990, 0.16, 0.5, 0.28);
+  } catch (e) { /* silent */ }
 }
 
 /* ------------------------------------------------------------------ */

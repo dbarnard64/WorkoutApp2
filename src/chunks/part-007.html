@@ -425,8 +425,9 @@ function vTrain(dp) {
     body =
       '<div class="warn" style="margin-bottom:12px">Move things into the order you actually do them. ' +
       "Your logged sets stay with each exercise.</div>" +
-      items
-        .map((it, i) => {
+      dayFlow(day, swapDay)
+        .map((f, i) => {
+          const it = f.it;
           const label =
             it.kind === "sec"
               ? '<span class="lbl2 s">' + esc(it.label) + "</span>"
@@ -458,8 +459,10 @@ function vTrain(dp) {
       : (canCopyLast(day)
         ? '<button class="copylast" data-act="copy-last">Copy last week\'s weights</button>'
         : "") +
-      items
-        .map((it) => {
+      dayFlow(day, false)
+        .map((f) => {
+          const it = f.it;
+          if (f.x) return vCard(it, hist, pb); /* added on the day, in the spot you moved it to */
           if (it.kind === "sec")
             return '<div class="sec"><div class="eyebrow on">' + esc(it.label) + "</div></div>";
           if (it.kind === "note") return '<div class="note">' + esc(it.text) + "</div>";
@@ -482,7 +485,7 @@ function vTrain(dp) {
           })
           .join("") + "</div>";
     const extras = dayExtras(dayIndexOf(day));
-    body += extras.map(function (it) { return vCard(it, hist, pb); }).join("");
+    if (swapd) body += extras.map(function (it) { return vCard(it, hist, pb); }).join(""); /* otherwise already placed above */
     body +=
       '<button class="dash" style="margin-top:12px" data-act="addex-open">+ Add an exercise to today</button>';
     if (!swapd && (day.rest || day.items.some((x) => x.kind === "ex")))

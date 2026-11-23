@@ -340,6 +340,58 @@ function orderedItems(day) {
   }
   return ord.map((i) => day.items[i]);
 }
+/* The day as you actually do it: the program items in your order, with the
+   exercises added on the day placed among them. An added exercise remembers
+   where it sits (after how many program items, and its rank among the added
+   ones) on its own log entry, so it only ever affects that week. */
+function dayFlow(day, swapd) {
+  const prog = swapd ? [] : orderedItems(day).map(function (it) { return { it: it, pi: day.items.indexOf(it) }; });
+  const w = S.log.weeks[wkNow()] || {};
+  const n = prog.length;
+  const ex = dayExtras(dayIndexOf(day)).map(function (e) {
+    const r = w[e.key] || {};
+    return { it: e, x: true, after: r.after >= 0 ? Math.min(r.after, n) : n, ar: r.ar >= 0 ? r.ar : 1e6 + e.ord };
+  });
+  ex.sort(function (a, b) { return a.after - b.after || a.ar - b.ar; });
+  const out = [];
+  let j = 0;
+  for (let i = 0; i <= n; i++) {
+    while (j < ex.length && ex[j].after === i) out.push(ex[j++]);
+    if (i < n) out.push(prog[i]);
+  }
+  return out;
+}
+function moveFlow(day, from, dir, swapd) {
+  const flow = dayFlow(day, swapd);
+  const to = from + dir;
+  if (to < 0 || to >= flow.length) return;
+  const t = flow[from];
+  flow[from] = flow[to];
+  flow[to] = t;
+  const p = activeProgram();
+  const ord = flow.filter(function (f) { return !f.x; }).map(function (f) { return f.pi; });
+  if (!swapd && ord.length === day.items.length) {
+    p.order = Object.assign({}, p.order || {});
+    p.order[day.id] = ord;
+  }
+  const w = S.log.weeks[wkNow()] || {};
+  let seen = 0, rank = 0;
+  flow.forEach(function (f) {
+    if (!f.x) { seen++; return; }
+    const r = w[f.it.key];
+    if (r) { r.after = seen; r.ar = rank++; }
+  });
+  persist();
+}
+function resetFlow(day) {
+  const w = S.log.weeks[wkNow()] || {};
+  dayExtras(dayIndexOf(day)).forEach(function (e) {
+    const r = w[e.key];
+    if (r) { delete r.after; delete r.ar; }
+  });
+  resetOrder(day);
+  persist();
+}
 function moveItem(day, from, dir) {
   const p = activeProgram();
   const cur =

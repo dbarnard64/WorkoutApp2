@@ -214,6 +214,9 @@ document.addEventListener("click", (ev) => {
       S.weekOff++;
       break;
     case "tab":
+      /* each tab keeps its own scroll; tapping the tab you are on goes to the top */
+      TAB_SCROLL[S.tab] = window.scrollY;
+      pendingScroll = el.dataset.t === S.tab ? 0 : TAB_SCROLL[el.dataset.t] || 0;
       S.page = null;
       S.tab = el.dataset.t;
       S.reorder = false;
@@ -545,13 +548,13 @@ document.addEventListener("click", (ev) => {
       S.reorder = false;
       break;
     case "mv-up":
-      moveItem(currentDay(), +el.dataset.i, -1);
+      moveFlow(currentDay(), +el.dataset.i, -1, !!daySwap(currentDay()));
       break;
     case "mv-dn":
-      moveItem(currentDay(), +el.dataset.i, 1);
+      moveFlow(currentDay(), +el.dataset.i, 1, !!daySwap(currentDay()));
       break;
     case "order-reset":
-      resetOrder(currentDay());
+      resetFlow(currentDay());
       break;
     case "deload": {
       const pr = S.programs.find((x) => x.id === el.dataset.id);
